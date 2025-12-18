@@ -1,36 +1,196 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🌌 The Portal Dashboard
 
-## Getting Started
+> Real-time insights into attendee journeys, revenue, and event operations for The Portal at Iceland Eclipse
 
-First, run the development server:
+![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-38bdf8?logo=tailwindcss)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## ✨ Features
+
+### 📊 **Overview Dashboard**
+
+- Approved vs Pending revenue at a glance
+- Application pipeline metrics
+- Real-time data from NocoDB
+
+### 👥 **People Journey Tracker**
+
+Visual conversion funnel showing exactly where each person is:
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  ACCEPTED   │ →  │  IN CART    │ →  │   PARTIAL   │ →  │  CONFIRMED  │
+│ no payment  │    │  checkout   │    │ pass only   │    │pass + lodging│
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Accepted** — Application approved, no payment activity yet
+- **In Cart** — Items in pending checkout
+- **Partial** — Paid for pass OR lodging, but not both
+- **Confirmed** — Has both pass AND lodging = ready to attend! 🎉
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 📦 **Products Analytics**
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Revenue breakdown by category (month passes, lodging)
+- Sold vs In Cart quantities
+- Per-product performance tracking
 
-## Learn More
+### 📝 **Applications Pipeline**
 
-To learn more about Next.js, take a look at the following resources:
+- Status breakdown (draft, in review, accepted, rejected)
+- Scholarship request tracking
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 🔔 **Payment Notifications** (Webhook)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Real-time email alerts when payments are approved
+- Postmark integration for reliable delivery
+- NocoDB webhook receiver
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🚀 Quick Start
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Prerequisites
+
+- Node.js 18+
+- NocoDB API access
+- Postmark account (for notifications)
+
+### Installation
+
+```bash
+# Clone the repo
+git clone https://github.com/im-xp/portal-dashboard.git
+cd portal-dashboard
+
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env.local
+# Edit .env.local with your credentials
+
+# Run development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+### Environment Variables
+
+```bash
+# NocoDB API
+NOCODB_URL=https://app.nocodb.com/api/v2
+NOCODB_TOKEN=your_nocodb_token
+
+# Email Notifications (Postmark)
+POSTMARK_SERVER_TOKEN=your_postmark_token
+FROM_EMAIL=notifications@your-domain.com
+NOTIFY_EMAILS=team@your-domain.com
+
+# Webhook Security
+NOCODB_WEBHOOK_SECRET=your_random_secret
+
+# App URL (for email links)
+NEXT_PUBLIC_APP_URL=https://your-dashboard.vercel.app
+```
+
+---
+
+## 🏗️ Architecture
+
+```
+┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│                  │     │                  │     │                  │
+│   Next.js App    │────▶│   NocoDB API     │────▶│   PostgreSQL     │
+│   (Dashboard)    │     │   (REST)         │     │   (Data)         │
+│                  │     │                  │     │                  │
+└──────────────────┘     └──────────────────┘     └──────────────────┘
+         │
+         │  Webhook
+         ▼
+┌──────────────────┐
+│                  │
+│    Postmark      │
+│    (Email)       │
+│                  │
+└──────────────────┘
+```
+
+### Tech Stack
+
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Components**: shadcn/ui
+- **Data**: NocoDB REST API
+- **Email**: Postmark
+- **Deployment**: Vercel
+
+---
+
+## 📁 Project Structure
+
+```
+src/
+├── app/
+│   ├── page.tsx              # Overview dashboard
+│   ├── people/               # Journey tracker
+│   │   ├── page.tsx
+│   │   ├── PeopleTable.tsx
+│   │   └── JourneyPipeline.tsx
+│   ├── products/             # Product analytics
+│   ├── applications/         # Application pipeline
+│   └── api/
+│       ├── refresh/          # Cache invalidation
+│       └── webhooks/         # Payment notifications
+├── components/
+│   ├── layout/               # Sidebar, Header
+│   └── ui/                   # shadcn components
+└── lib/
+    ├── nocodb.ts             # API client + caching
+    ├── types.ts              # TypeScript definitions
+    └── utils.ts              # Helpers
+```
+
+---
+
+## 🔧 NocoDB Webhook Setup
+
+To receive real-time payment notifications:
+
+1. Go to NocoDB → `payments` table → Webhooks
+2. Create webhook:
+   - **Event**: After Update
+   - **URL**: `https://your-app.vercel.app/api/webhooks/payment-approved`
+   - **Header**: `x-webhook-secret: your_secret`
+   - **Condition**: `status = approved`
+
+---
+
+## 🚢 Deployment
+
+### Vercel (Recommended)
+
+1. Push to GitHub
+2. Import project in Vercel
+3. Add environment variables
+4. Deploy!
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/im-xp/portal-dashboard)
+
+---
+
+## 📄 License
+
+MIT © [IM-XP](https://github.com/im-xp)
+
+---
+
+<p align="center">
+  <strong>Built with 🧡 for The Portal at Iceland Eclipse</strong>
+</p>

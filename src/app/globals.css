@@ -123,3 +123,10 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Safe area padding for iOS devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

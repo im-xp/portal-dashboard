@@ -43,61 +43,61 @@ export default async function ApplicationsPage() {
         description="Track application pipeline and status"
       />
 
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         {/* Status Summary */}
-        <div className="grid gap-4 md:grid-cols-4 mb-8">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-6 md:mb-8">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500">Total</CardTitle>
-              <FileText className="h-5 w-5 text-zinc-400" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-zinc-500">Total</CardTitle>
+              <FileText className="h-4 w-4 md:h-5 md:w-5 text-zinc-400" />
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{metrics.totalApplications}</div>
+            <CardContent className="pt-0">
+              <div className="text-2xl md:text-3xl font-bold">{metrics.totalApplications}</div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500">Accepted</CardTitle>
-              <CheckCircle className="h-5 w-5 text-emerald-500" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-zinc-500">Accepted</CardTitle>
+              <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-emerald-500" />
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-emerald-600">
+            <CardContent className="pt-0">
+              <div className="text-2xl md:text-3xl font-bold text-emerald-600">
                 {metrics.applicationsByStatus['accepted'] || 0}
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500">In Review</CardTitle>
-              <Clock className="h-5 w-5 text-amber-500" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-zinc-500">In Review</CardTitle>
+              <Clock className="h-4 w-4 md:h-5 md:w-5 text-amber-500" />
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-600">
+            <CardContent className="pt-0">
+              <div className="text-2xl md:text-3xl font-bold text-amber-600">
                 {metrics.applicationsByStatus['in review'] || 0}
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500">With Purchases</CardTitle>
-              <Users className="h-5 w-5 text-zinc-400" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-zinc-500">Purchases</CardTitle>
+              <Users className="h-4 w-4 md:h-5 md:w-5 text-zinc-400" />
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{metrics.paidAttendees}</div>
+            <CardContent className="pt-0">
+              <div className="text-2xl md:text-3xl font-bold">{metrics.paidAttendees}</div>
             </CardContent>
           </Card>
         </div>
 
         {/* Applications Table */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">All Applications</CardTitle>
+          <CardHeader className="pb-3 md:pb-6">
+            <CardTitle className="text-base md:text-lg">All Applications</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Table>
+          <CardContent className="overflow-x-auto">
+            <Table className="min-w-[700px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Applicant</TableHead>

@@ -20,9 +20,9 @@ export default async function DashboardPage() {
         description="Real-time insights into your popup city operations"
       />
 
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         {/* Key Metrics */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
           <MetricCard
             title="Total Applications"
             value={metrics.totalApplications}
@@ -54,60 +54,60 @@ export default async function DashboardPage() {
         </div>
 
         {/* Revenue Breakdown */}
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <div className="mt-4 md:mt-6 grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-3">
           <Card className="bg-emerald-50 border-emerald-200">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-emerald-700 flex items-center gap-2">
+            <CardHeader className="pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-emerald-700 flex items-center gap-2">
                 <CreditCard className="h-4 w-4" />
                 Approved Payments
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-emerald-800">
+            <CardContent className="pt-0">
+              <div className="text-xl md:text-2xl font-bold text-emerald-800">
                 {formatCurrency(metrics.revenue.approvedRevenue)}
               </div>
-              <p className="text-sm text-emerald-600">
+              <p className="text-xs md:text-sm text-emerald-600">
                 {metrics.revenue.approvedPaymentsCount} payment{metrics.revenue.approvedPaymentsCount !== 1 ? 's' : ''} completed
               </p>
             </CardContent>
           </Card>
 
           <Card className="bg-amber-50 border-amber-200">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-amber-700 flex items-center gap-2">
+            <CardHeader className="pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-amber-700 flex items-center gap-2">
                 <Clock className="h-4 w-4" />
                 Pending Payments
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-amber-800">
+            <CardContent className="pt-0">
+              <div className="text-xl md:text-2xl font-bold text-amber-800">
                 {formatCurrency(metrics.revenue.pendingRevenue)}
               </div>
-              <p className="text-sm text-amber-600">
+              <p className="text-xs md:text-sm text-amber-600">
                 {metrics.revenue.pendingPaymentsCount} checkout{metrics.revenue.pendingPaymentsCount !== 1 ? 's' : ''} in progress
               </p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 flex items-center gap-2">
+            <CardHeader className="pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-zinc-500 flex items-center gap-2">
                 <DollarSign className="h-4 w-4" />
                 Total Pipeline
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
+            <CardContent className="pt-0">
+              <div className="text-xl md:text-2xl font-bold">
                 {formatCurrency(metrics.revenue.totalRevenue)}
               </div>
-              <p className="text-sm text-zinc-500">
+              <p className="text-xs md:text-sm text-zinc-500">
                 Approved + Pending
               </p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="mt-6 md:mt-8 grid gap-4 md:gap-6 lg:grid-cols-2">
           {/* Application Status Breakdown */}
           <Card>
             <CardHeader>

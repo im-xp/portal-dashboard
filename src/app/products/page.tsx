@@ -110,69 +110,69 @@ export default async function ProductsPage() {
         description="Sales breakdown by product and category"
       />
 
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-4 mb-8">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-6 md:mb-8">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500">Total Products</CardTitle>
-              <Package className="h-5 w-5 text-zinc-400" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-zinc-500">Products</CardTitle>
+              <Package className="h-4 w-4 md:h-5 md:w-5 text-zinc-400" />
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{products.length}</div>
-              <p className="text-sm text-zinc-500 mt-1">available for purchase</p>
+            <CardContent className="pt-0">
+              <div className="text-2xl md:text-3xl font-bold">{products.length}</div>
+              <p className="text-xs md:text-sm text-zinc-500 mt-1 hidden md:block">available for purchase</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500">Products Assigned</CardTitle>
-              <TrendingUp className="h-5 w-5 text-zinc-400" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-zinc-500">Assigned</CardTitle>
+              <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-zinc-400" />
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
+            <CardContent className="pt-0">
+              <div className="text-2xl md:text-3xl font-bold">
                 {metrics.productSales.reduce((sum, ps) => sum + ps.quantity, 0)}
               </div>
-              <p className="text-sm text-zinc-500 mt-1">includes test/manual</p>
+              <p className="text-xs md:text-sm text-zinc-500 mt-1 hidden md:block">includes test/manual</p>
             </CardContent>
           </Card>
 
           <Card className="bg-emerald-50 border-emerald-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-emerald-700">Approved Revenue</CardTitle>
-              <DollarSign className="h-5 w-5 text-emerald-600" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-emerald-700">Approved</CardTitle>
+              <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-emerald-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-emerald-900">
+            <CardContent className="pt-0">
+              <div className="text-xl md:text-3xl font-bold text-emerald-900">
                 {formatCurrency(metrics.revenue.approvedRevenue)}
               </div>
-              <p className="text-sm text-emerald-700 mt-1">
+              <p className="text-xs md:text-sm text-emerald-700 mt-1 hidden md:block">
                 {metrics.revenue.approvedPaymentsCount} completed
               </p>
             </CardContent>
           </Card>
 
           <Card className="bg-amber-50 border-amber-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-amber-700">Pending Revenue</CardTitle>
-              <DollarSign className="h-5 w-5 text-amber-600" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-amber-700">Pending</CardTitle>
+              <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-amber-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-900">
+            <CardContent className="pt-0">
+              <div className="text-xl md:text-3xl font-bold text-amber-900">
                 {formatCurrency(metrics.revenue.pendingRevenue)}
               </div>
-              <p className="text-sm text-amber-700 mt-1">
+              <p className="text-xs md:text-sm text-amber-700 mt-1 hidden md:block">
                 {metrics.revenue.pendingPaymentsCount} in checkout
               </p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-4 md:gap-6 lg:grid-cols-3">
           {/* Category Breakdown */}
           <Card className="lg:col-span-1">
-            <CardHeader>
-              <CardTitle className="text-lg">Revenue by Category</CardTitle>
+            <CardHeader className="pb-3 md:pb-6">
+              <CardTitle className="text-base md:text-lg">Revenue by Category</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -212,11 +212,11 @@ export default async function ProductsPage() {
 
           {/* Products Table */}
           <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg">All Products</CardTitle>
+            <CardHeader className="pb-3 md:pb-6">
+              <CardTitle className="text-base md:text-lg">All Products</CardTitle>
             </CardHeader>
-            <CardContent>
-              <Table>
+            <CardContent className="overflow-x-auto">
+              <Table className="min-w-[600px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Product</TableHead>

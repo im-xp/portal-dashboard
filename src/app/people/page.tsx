@@ -21,12 +21,12 @@ export default async function PeoplePage() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col min-h-0">
       <Header 
         title="People" 
         description="Track the journey from accepted applicant to confirmed attendee"
       />
-      <div className="flex-1 p-8 overflow-hidden">
+      <div className="flex-1 p-4 md:p-8 overflow-auto">
         <PeopleTable 
           applications={applications} 
           attendees={attendees}

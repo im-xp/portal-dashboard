@@ -94,7 +94,7 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
   }, [attendeesWithStatus, search, statusFilter, journeyFilter]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       {/* Journey Pipeline */}
       <JourneyPipeline 
         counts={journeyCounts}
@@ -105,9 +105,9 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
       <div className="flex gap-6 flex-1 min-h-0">
         {/* Main Table */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Filters */}
-          <div className="flex gap-4 mb-4">
-            <div className="relative flex-1 max-w-sm">
+          {/* Filters - stack on mobile */}
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4">
+            <div className="relative flex-1 sm:max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
               <Input
                 placeholder="Search by name or email..."
@@ -117,7 +117,7 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-full sm:w-40">
                 <SelectValue placeholder="App Status" />
               </SelectTrigger>
               <SelectContent>
@@ -135,10 +135,10 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
             Showing {filteredAttendees.length} of {attendees.length} people
           </p>
 
-          {/* Table */}
-          <Card className="flex-1 overflow-hidden">
-            <div className="overflow-auto h-full">
-              <Table>
+          {/* Table - horizontal scroll on mobile */}
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table className="min-w-[600px]">
                 <TableHeader className="sticky top-0 bg-white">
                   <TableRow>
                     <TableHead>Name</TableHead>
@@ -207,9 +207,9 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
           </Card>
         </div>
 
-        {/* Detail Panel */}
+        {/* Detail Panel - hidden on mobile */}
         {selectedPerson && (
-          <Card className="w-80 flex-shrink-0 overflow-auto">
+          <Card className="hidden lg:block w-80 flex-shrink-0 overflow-auto">
             <CardHeader className="flex flex-row items-start justify-between">
               <div>
                 <CardTitle className="text-lg">{selectedPerson.name}</CardTitle>

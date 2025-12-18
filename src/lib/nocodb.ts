@@ -64,7 +64,7 @@ export function clearCache(): void {
   cache.clear();
 }
 
-async function nocoFetch<T>(endpoint: string, retries = 8): Promise<T> {
+async function nocoFetch<T>(endpoint: string, retries = 3): Promise<T> {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const res = await fetch(`${NOCODB_URL}${endpoint}`, {
@@ -72,27 +72,27 @@ async function nocoFetch<T>(endpoint: string, retries = 8): Promise<T> {
           'xc-token': NOCODB_TOKEN,
           'Content-Type': 'application/json',
         },
-        cache: 'no-store', // Avoid caching issues during dev
+        cache: 'no-store',
       });
 
       if (res.status === 429) {
-        // Rate limited - wait longer with exponential backoff (starts at 3s)
-        const waitTime = 3000 * Math.pow(2, attempt);
-        console.log(`Rate limited on ${endpoint}, waiting ${waitTime}ms before retry ${attempt + 1}/${retries}`);
+        // Rate limited - short backoff for serverless
+        const waitTime = 500 * (attempt + 1);
+        console.log(`Rate limited on ${endpoint}, waiting ${waitTime}ms`);
         await delay(waitTime);
         continue;
       }
 
       if (!res.ok) {
-        throw new Error(`NocoDB API error: ${res.status} ${res.statusText}`);
+        const text = await res.text();
+        throw new Error(`NocoDB API error: ${res.status} ${res.statusText} - ${text}`);
       }
 
       return res.json();
     } catch (error) {
+      console.error(`Fetch attempt ${attempt + 1} failed for ${endpoint}:`, error);
       if (attempt === retries - 1) throw error;
-      const waitTime = 2000 * (attempt + 1);
-      console.log(`Request failed, waiting ${waitTime}ms before retry ${attempt + 1}/${retries}`);
-      await delay(waitTime);
+      await delay(300 * (attempt + 1));
     }
   }
   throw new Error('NocoDB API: Max retries exceeded');
@@ -148,20 +148,14 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   console.log('Fetching fresh dashboard data...');
   
-  // Fetch base data SEQUENTIALLY to avoid rate limiting
-  const applications = await getApplications();
-  await delay(300);
-  
-  const attendees = await getAttendees();
-  await delay(300);
-  
-  const products = await getProducts();
-  await delay(300);
-  
-  const payments = await getPayments();
-  await delay(300);
-  
-  const paymentProducts = await getPaymentProducts();
+  // Fetch all base data in parallel for speed
+  const [applications, attendees, products, payments, paymentProducts] = await Promise.all([
+    getApplications(),
+    getAttendees(),
+    getProducts(),
+    getPayments(),
+    getPaymentProducts(),
+  ]);
   
   // NOTE: We skip fetching attendee_products (linked products) because:
   // 1. It requires N API calls (one per attendee) which is too slow

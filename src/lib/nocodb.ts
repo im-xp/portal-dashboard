@@ -27,10 +27,6 @@ const TABLES = {
   paymentProducts: process.env.NOCODB_TABLE_PAYMENT_PRODUCTS || 'm9y11y6lwwxuq6k',
 } as const;
 
-const LINK_COLUMNS = {
-  attendeeProducts: process.env.NOCODB_LINK_ATTENDEE_PRODUCTS || 'cjc8h3w216z8n9j',
-} as const;
-
 // Simple delay helper
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -125,13 +121,6 @@ export async function getProducts(): Promise<Product[]> {
   return response.list;
 }
 
-export async function getLinkedProducts(attendeeId: number): Promise<LinkedProduct[]> {
-  const response = await nocoFetch<NocoDBResponse<LinkedProduct>>(
-    `/tables/${TABLES.attendees}/links/${LINK_COLUMNS.attendeeProducts}/records/${attendeeId}`
-  );
-  return response.list;
-}
-
 export async function getPayments(): Promise<Payment[]> {
   const response = await nocoFetch<NocoDBResponse<Payment>>(
     `/tables/${TABLES.payments}/records?limit=500`
@@ -144,32 +133,6 @@ export async function getPaymentProducts(): Promise<PaymentProduct[]> {
     `/tables/${TABLES.paymentProducts}/records?limit=500`
   );
   return response.list;
-}
-
-// Batch fetch linked products with rate limiting
-async function batchGetLinkedProducts(attendeeIds: number[]): Promise<Map<number, LinkedProduct[]>> {
-  const results = new Map<number, LinkedProduct[]>();
-  
-  // Process ONE at a time with generous delays to avoid rate limiting
-  const DELAY_BETWEEN_REQUESTS = 400; // 400ms between each request
-  
-  for (let i = 0; i < attendeeIds.length; i++) {
-    const attendeeId = attendeeIds[i];
-    try {
-      const products = await getLinkedProducts(attendeeId);
-      results.set(attendeeId, products);
-    } catch (error) {
-      console.error(`Failed to get products for attendee ${attendeeId}:`, error);
-      results.set(attendeeId, []);
-    }
-    
-    // Delay between requests (skip for last one)
-    if (i < attendeeIds.length - 1) {
-      await delay(DELAY_BETWEEN_REQUESTS);
-    }
-  }
-  
-  return results;
 }
 
 // Dashboard data fetcher (aggregates everything)
@@ -200,12 +163,11 @@ export async function getDashboardData(): Promise<DashboardData> {
   
   const paymentProducts = await getPaymentProducts();
   
-  // Wait before fetching linked data
-  await delay(500);
-  
-  // Now fetch linked products with rate limiting
-  const attendeeIds = attendees.map(a => a.id);
-  const productsMap = await batchGetLinkedProducts(attendeeIds);
+  // NOTE: We skip fetching attendee_products (linked products) because:
+  // 1. It requires N API calls (one per attendee) which is too slow
+  // 2. payment_products already contains all purchased product data
+  // 3. attendee_products is legacy/manual assignment data
+  const productsMap = new Map<number, LinkedProduct[]>();
   
   // Group payment products by payment_id first (need this for payment status)
   const paymentProductsByPayment = paymentProducts.reduce((acc, pp) => {

@@ -340,8 +340,8 @@ export async function getDashboardData() {
   const approvedPayments = paymentsWithProducts.filter(p => p.status === 'approved');
   const pendingPayments = paymentsWithProducts.filter(p => p.status === 'pending');
 
-  const approvedRevenue = approvedPayments.reduce((sum, p) => sum + p.amount, 0);
-  const pendingRevenue = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
+  const approvedRevenue = approvedPayments.reduce<number>((sum, p) => sum + p.amount, 0);
+  const pendingRevenue = pendingPayments.reduce<number>((sum, p) => sum + p.amount, 0);
 
   const revenue: RevenueMetrics = {
     approvedRevenue,

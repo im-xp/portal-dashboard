@@ -121,42 +121,6 @@ NEXT_PUBLIC_APP_URL=https://your-dashboard.vercel.app
 └──────────────────┘
 ```
 
-### Tech Stack
-
-- **Framework**: Next.js 15 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Components**: shadcn/ui
-- **Data**: NocoDB REST API
-- **Email**: Postmark
-- **Deployment**: Vercel
-
----
-
-## 📁 Project Structure
-
-```
-src/
-├── app/
-│   ├── page.tsx              # Overview dashboard
-│   ├── people/               # Journey tracker
-│   │   ├── page.tsx
-│   │   ├── PeopleTable.tsx
-│   │   └── JourneyPipeline.tsx
-│   ├── products/             # Product analytics
-│   ├── applications/         # Application pipeline
-│   └── api/
-│       ├── refresh/          # Cache invalidation
-│       └── webhooks/         # Payment notifications
-├── components/
-│   ├── layout/               # Sidebar, Header
-│   └── ui/                   # shadcn components
-└── lib/
-    ├── nocodb.ts             # API client + caching
-    ├── types.ts              # TypeScript definitions
-    └── utils.ts              # Helpers
-```
-
 ---
 
 ## 🔧 NocoDB Webhook Setup

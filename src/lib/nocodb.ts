@@ -16,15 +16,32 @@ import type {
   DashboardData,
 } from './types';
 
-const NOCODB_URL = process.env.NOCODB_URL || 'https://app.nocodb.com/api/v2';
-const NOCODB_TOKEN = process.env.NOCODB_TOKEN || '';
+// Helper to clean env vars (strip whitespace/newlines that can corrupt values)
+const cleanEnv = (value: string | undefined): string => (value || '').trim();
+
+// NocoDB configuration with validation
+const NOCODB_URL = cleanEnv(process.env.NOCODB_URL) || 'https://app.nocodb.com/api/v2';
+const NOCODB_TOKEN = cleanEnv(process.env.NOCODB_TOKEN);
+
+// Validate URL contains /api/v2 (common misconfiguration)
+if (NOCODB_URL && !NOCODB_URL.includes('/api/v2')) {
+  console.error(
+    `⚠️ NOCODB_URL misconfigured! Got "${NOCODB_URL}" but expected path to include "/api/v2". ` +
+    `Full URL should be "https://app.nocodb.com/api/v2"`
+  );
+}
+
+// Validate token is present
+if (!NOCODB_TOKEN) {
+  console.error('⚠️ NOCODB_TOKEN is not set! API calls will fail.');
+}
 
 const TABLES = {
-  applications: process.env.NOCODB_TABLE_APPLICATIONS || 'mhiveeaf8gb9kvy',
-  attendees: process.env.NOCODB_TABLE_ATTENDEES || 'mduqna6ve55k8wi',
-  products: process.env.NOCODB_TABLE_PRODUCTS || 'mjt8xx9ltkhfcbu',
-  payments: process.env.NOCODB_TABLE_PAYMENTS || 'mgxw2e15fw64o1f',
-  paymentProducts: process.env.NOCODB_TABLE_PAYMENT_PRODUCTS || 'm9y11y6lwwxuq6k',
+  applications: cleanEnv(process.env.NOCODB_TABLE_APPLICATIONS) || 'mhiveeaf8gb9kvy',
+  attendees: cleanEnv(process.env.NOCODB_TABLE_ATTENDEES) || 'mduqna6ve55k8wi',
+  products: cleanEnv(process.env.NOCODB_TABLE_PRODUCTS) || 'mjt8xx9ltkhfcbu',
+  payments: cleanEnv(process.env.NOCODB_TABLE_PAYMENTS) || 'mgxw2e15fw64o1f',
+  paymentProducts: cleanEnv(process.env.NOCODB_TABLE_PAYMENT_PRODUCTS) || 'm9y11y6lwwxuq6k',
 } as const;
 
 // Simple delay helper
@@ -85,6 +102,14 @@ async function nocoFetch<T>(endpoint: string, retries = 3): Promise<T> {
 
       if (!res.ok) {
         const text = await res.text();
+        // Provide helpful diagnosis for common errors
+        if (res.status === 404) {
+          throw new Error(
+            `NocoDB API error: 404 Not Found - ${text}\n` +
+            `Full URL: ${NOCODB_URL}${endpoint}\n` +
+            `Check: NOCODB_URL should be "https://app.nocodb.com/api/v2"`
+          );
+        }
         throw new Error(`NocoDB API error: ${res.status} ${res.statusText} - ${text}`);
       }
 

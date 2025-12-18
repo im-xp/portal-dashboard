@@ -197,3 +197,12 @@ export interface DashboardMetrics {
   paymentsWithDiscounts: PaymentWithProducts[];  // Payments that used discount codes
 }
 
+// Return type for getDashboardData
+export interface DashboardData {
+  metrics: DashboardMetrics;
+  applications: ApplicationWithDetails[];
+  attendees: AttendeeWithProducts[];
+  products: Product[];
+  payments: PaymentWithProducts[];
+}
+

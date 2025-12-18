@@ -13,6 +13,7 @@ import type {
   RevenueMetrics,
   ProductSaleRecord,
   JourneyStage,
+  DashboardData,
 } from './types';
 
 const NOCODB_URL = process.env.NOCODB_URL || 'https://app.nocodb.com/api/v2';
@@ -171,48 +172,12 @@ async function batchGetLinkedProducts(attendeeIds: number[]): Promise<Map<number
   return results;
 }
 
-// Composite fetchers
-
-export async function getAttendeesWithProducts(): Promise<AttendeeWithProducts[]> {
-  const attendees = await getAttendees();
-  
-  // Get all linked products with rate limiting
-  const attendeeIds = attendees.map(a => a.id);
-  const productsMap = await batchGetLinkedProducts(attendeeIds);
-  
-  return attendees.map(attendee => ({
-    ...attendee,
-    purchasedProducts: productsMap.get(attendee.id) || [],
-  }));
-}
-
-export async function getApplicationsWithDetails(): Promise<ApplicationWithDetails[]> {
-  const [applications, attendeesWithProducts] = await Promise.all([
-    getApplications(),
-    getAttendeesWithProducts(),
-  ]);
-
-  // Group attendees by application_id
-  const attendeesByApp = attendeesWithProducts.reduce((acc, att) => {
-    if (!acc[att.application_id]) {
-      acc[att.application_id] = [];
-    }
-    acc[att.application_id].push(att);
-    return acc;
-  }, {} as Record<number, AttendeeWithProducts[]>);
-
-  return applications.map((app) => ({
-    ...app,
-    attendeesList: attendeesByApp[app.id] || [],
-  }));
-}
-
 // Dashboard data fetcher (aggregates everything)
 
-export async function getDashboardData() {
+export async function getDashboardData(): Promise<DashboardData> {
   // Check cache first
   const cacheKey = 'dashboard-data';
-  const cached = getCached<Awaited<ReturnType<typeof getDashboardData>>>(cacheKey);
+  const cached = getCached<DashboardData>(cacheKey);
   if (cached) {
     console.log('Using cached dashboard data');
     return cached;
@@ -340,8 +305,8 @@ export async function getDashboardData() {
   const approvedPayments = paymentsWithProducts.filter(p => p.status === 'approved');
   const pendingPayments = paymentsWithProducts.filter(p => p.status === 'pending');
 
-  const approvedRevenue = approvedPayments.reduce<number>((sum, p) => sum + p.amount, 0);
-  const pendingRevenue = pendingPayments.reduce<number>((sum, p) => sum + p.amount, 0);
+  const approvedRevenue = approvedPayments.reduce((sum, p) => sum + p.amount, 0);
+  const pendingRevenue = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
 
   const revenue: RevenueMetrics = {
     approvedRevenue,

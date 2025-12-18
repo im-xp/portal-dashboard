@@ -131,7 +131,7 @@ export default async function ProductsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
-                {metrics.productSales.reduce<number>((sum, ps) => sum + ps.quantity, 0)}
+                {metrics.productSales.reduce((sum, ps) => sum + ps.quantity, 0)}
               </div>
               <p className="text-sm text-zinc-500 mt-1">includes test/manual</p>
             </CardContent>

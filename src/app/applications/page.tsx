@@ -110,7 +110,7 @@ export default async function ApplicationsPage() {
               </TableHeader>
               <TableBody>
                 {sortedApplications.map((app) => {
-                  const totalProducts = app.attendeesList.reduce<number>(
+                  const totalProducts = app.attendeesList.reduce(
                     (sum, att) => sum + att.purchasedProducts.length,
                     0
                   );

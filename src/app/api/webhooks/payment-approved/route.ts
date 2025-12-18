@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as postmark from 'postmark';
 
-// Initialize Postmark client
-const postmarkClient = new postmark.ServerClient(
-  process.env.POSTMARK_SERVER_TOKEN || ''
-);
+// Lazy-initialize Postmark client (only when actually sending)
+let postmarkClient: postmark.ServerClient | null = null;
+
+function getPostmarkClient(): postmark.ServerClient | null {
+  if (!process.env.POSTMARK_SERVER_TOKEN) {
+    return null;
+  }
+  if (!postmarkClient) {
+    postmarkClient = new postmark.ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+  }
+  return postmarkClient;
+}
 
 // Team members to notify
 const NOTIFY_EMAILS = (process.env.NOTIFY_EMAILS || 'jon@im-xp.com').split(',');
@@ -150,9 +158,15 @@ View in dashboard: ${process.env.NEXT_PUBLIC_APP_URL || 'https://your-dashboard.
   `;
 
   // Send to all team members
+  const client = getPostmarkClient();
+  if (!client) {
+    console.log('Postmark not configured, skipping email notifications');
+    return;
+  }
+
   for (const email of NOTIFY_EMAILS) {
     try {
-      await postmarkClient.sendEmail({
+      await client.sendEmail({
         From: FROM_EMAIL,
         To: email.trim(),
         Subject: subject,

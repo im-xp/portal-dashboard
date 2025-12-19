@@ -16,9 +16,16 @@ interface GeminiResponse {
 }
 
 /**
- * Generate a one-line summary of an email using Gemini
+ * Generate a summary of an email using Gemini
+ * @param emailBody - The email body text
+ * @param subject - The email subject
+ * @param customerEmail - The customer's email address (for context)
  */
-export async function summarizeEmail(emailBody: string, subject: string): Promise<string | null> {
+export async function summarizeEmail(
+  emailBody: string, 
+  subject: string,
+  customerEmail?: string
+): Promise<string | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey) {
@@ -31,11 +38,13 @@ export async function summarizeEmail(emailBody: string, subject: string): Promis
     ? emailBody.slice(0, 3000) + '...[truncated]'
     : emailBody;
 
+  const customerContext = customerEmail ? `\nCustomer email: ${customerEmail}` : '';
+
   const prompt = `Analyze this customer support email and write a complete summary (2-3 sentences):
 - Who is this person and their situation?
 - What are they asking or requesting?  
 - What action is needed?
-
+${customerContext}
 Subject: ${subject}
 
 Email:

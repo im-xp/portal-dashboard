@@ -11,6 +11,8 @@ import {
   parseEmailAddresses,
   isNoiseMessage,
   isInternalSender,
+  isForwardedEmail,
+  extractForwardedSender,
   getMessageDirection,
 } from '@/lib/gmail';
 import { summarizeEmail } from '@/lib/gemini';
@@ -117,15 +119,41 @@ export async function POST() {
         // Skip noise messages for ticket creation
         if (isNoise) continue;
 
-        // Skip internal senders (don't create tickets for team emails)
-        if (direction === 'inbound' && isInternalSender(fromEmail)) {
-          continue;
-        }
-
         // Create/update ticket based on direction
         if (direction === 'inbound') {
-          // Inbound: customer email is the sender
-          const ticketKey = generateTicketKey(message.threadId, fromEmail);
+          // Determine customer email - handle forwarded emails from internal senders
+          let customerEmail = fromEmail;
+          let isForward = false;
+          
+          if (isInternalSender(fromEmail)) {
+            // Check if this is a forwarded email
+            if (isForwardedEmail(subject || '')) {
+              // Try to extract original sender from email body
+              try {
+                const fullMessage = await getMessageFull(message.id);
+                if (fullMessage.body) {
+                  const originalSender = extractForwardedSender(fullMessage.body);
+                  if (originalSender) {
+                    customerEmail = originalSender;
+                    isForward = true;
+                    console.log(`[Sync] Forwarded email detected: ${fromEmail} -> original sender: ${customerEmail}`);
+                  } else {
+                    // Couldn't extract original sender, skip this message
+                    console.log(`[Sync] Skipping internal forward - couldn't extract original sender: ${subject}`);
+                    continue;
+                  }
+                }
+              } catch (e) {
+                console.warn('[Sync] Failed to process forward:', e);
+                continue;
+              }
+            } else {
+              // Internal sender, not a forward - skip
+              continue;
+            }
+          }
+          
+          const ticketKey = generateTicketKey(message.threadId, customerEmail);
           
           const { data: existingTicket } = await supabase
             .from('email_tickets')
@@ -140,7 +168,8 @@ export async function POST() {
               try {
                 const fullMessage = await getMessageFull(message.id);
                 if (fullMessage.body) {
-                  summary = await summarizeEmail(fullMessage.body, subject || '');
+                  // Pass customer email for context to ensure correct attribution
+                  summary = await summarizeEmail(fullMessage.body, subject || '', customerEmail);
                 }
               } catch (e) {
                 console.warn('[Sync] Failed to generate summary:', e);
@@ -150,7 +179,7 @@ export async function POST() {
             const { error: updateError } = await supabase
               .from('email_tickets')
               .update({
-                subject,
+                subject: isForward ? subject?.replace(/^Fwd:\s*/i, '') : subject,
                 last_inbound_ts: internalTs,
                 ...(summary && !existingTicket.summary ? { summary } : {}),
               })
@@ -163,7 +192,8 @@ export async function POST() {
             try {
               const fullMessage = await getMessageFull(message.id);
               if (fullMessage.body) {
-                summary = await summarizeEmail(fullMessage.body, subject || '');
+                // Pass customer email for context to ensure correct attribution
+                summary = await summarizeEmail(fullMessage.body, subject || '', customerEmail);
               }
             } catch (e) {
               console.warn('[Sync] Failed to generate summary:', e);
@@ -174,8 +204,8 @@ export async function POST() {
               .insert({
                 ticket_key: ticketKey,
                 gmail_thread_id: message.threadId,
-                customer_email: fromEmail,
-                subject,
+                customer_email: customerEmail,
+                subject: isForward ? subject?.replace(/^Fwd:\s*/i, '') : subject,
                 last_inbound_ts: internalTs,
                 summary,
               });

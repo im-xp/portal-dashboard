@@ -268,6 +268,46 @@ export function isInternalSender(email: string): boolean {
 }
 
 /**
+ * Check if a subject indicates a forwarded email
+ */
+export function isForwardedEmail(subject: string): boolean {
+  const normalizedSubject = subject.toLowerCase().trim();
+  return normalizedSubject.startsWith('fwd:') || normalizedSubject.startsWith('fw:');
+}
+
+/**
+ * Extract the original sender's email from a forwarded email body
+ * Looks for patterns like:
+ * - "From: Name <email@example.com>"
+ * - "---------- Forwarded message ---------\nFrom: Name <email@example.com>"
+ */
+export function extractForwardedSender(emailBody: string): string | null {
+  if (!emailBody) return null;
+  
+  // Pattern 1: Gmail forward format "---------- Forwarded message ---------\nFrom: Name <email>"
+  const gmailForwardMatch = emailBody.match(
+    /-{5,}\s*Forwarded message\s*-{5,}[\s\S]*?From:\s*(?:[^<\n]*<)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i
+  );
+  if (gmailForwardMatch) {
+    return gmailForwardMatch[1].toLowerCase();
+  }
+  
+  // Pattern 2: Simple "From: email@example.com" at start of forward
+  const simpleFromMatch = emailBody.match(
+    /^[\s\S]{0,500}From:\s*(?:[^<\n]*<)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/im
+  );
+  if (simpleFromMatch) {
+    const extractedEmail = simpleFromMatch[1].toLowerCase();
+    // Make sure it's not an internal sender
+    if (!isInternalSender(extractedEmail)) {
+      return extractedEmail;
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Check if a message is noise (auto-reply, bounce, etc.)
  */
 export function isNoiseMessage(message: GmailMessage): boolean {

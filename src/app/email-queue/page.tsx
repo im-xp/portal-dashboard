@@ -42,8 +42,6 @@ interface SyncStatus {
   messageCount: number;
 }
 
-const SUPPORT_EMAIL = 'theportalsupport@icelandeclipse.com';
-
 // Team members who can claim tickets
 const TEAM_MEMBERS = [
   'jon@im-xp.com',
@@ -158,7 +156,8 @@ export default function EmailQueuePage() {
   };
 
   const openInGmail = (threadId: string) => {
-    const url = `https://mail.google.com/mail/?authuser=${SUPPORT_EMAIL}#all/${threadId}`;
+    // Direct link to thread in inbox view
+    const url = `https://mail.google.com/mail/u/0/#inbox/${threadId}`;
     window.open(url, '_blank');
   };
 
@@ -417,15 +416,17 @@ export default function EmailQueuePage() {
                         </Button>
                       ) : null}
 
-                      {/* Open in Gmail */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openInGmail(ticket.gmail_thread_id)}
+                      {/* Open in Gmail - search by sender email */}
+                      <a
+                        href={`https://mail.google.com/mail/u/0/#search/from:${encodeURIComponent(ticket.customer_email)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3"
+                        title={`Search: from:${ticket.customer_email}`}
                       >
                         <ExternalLink className="h-4 w-4 mr-1" />
                         Gmail
-                      </Button>
+                      </a>
                     </div>
                   </div>
                 ))}
@@ -438,7 +439,7 @@ export default function EmailQueuePage() {
         <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-4">
           <p className="text-sm text-blue-800">
             <strong>Workflow:</strong> Claim a ticket → Open in Gmail → Reply from{' '}
-            <code className="bg-blue-100 px-1 rounded">{SUPPORT_EMAIL}</code> →
+            <code className="bg-blue-100 px-1 rounded">theportalsupport@icelandeclipse.com</code> →
             {' '}Ticket will auto-clear on next sync.
           </p>
         </div>

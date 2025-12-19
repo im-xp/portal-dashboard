@@ -9,6 +9,7 @@ import {
   parseEmailAddress,
   parseEmailAddresses,
   isNoiseMessage,
+  isInternalSender,
   getMessageDirection,
 } from '@/lib/gmail';
 
@@ -113,6 +114,11 @@ export async function POST() {
 
         // Skip noise messages for ticket creation
         if (isNoise) continue;
+
+        // Skip internal senders (don't create tickets for team emails)
+        if (direction === 'inbound' && isInternalSender(fromEmail)) {
+          continue;
+        }
 
         // Create/update ticket based on direction
         if (direction === 'inbound') {

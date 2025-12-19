@@ -157,6 +157,42 @@ export function parseEmailAddresses(header: string | null): string[] {
 }
 
 /**
+ * Internal sender addresses/domains that should not create tickets
+ */
+const INTERNAL_SENDERS = [
+  'theportalsupport@icelandeclipse.com',
+  'theportal@icelandeclipse.com',
+  'hallo@icelandeclipse.com',
+  'hello@icelandeclipse.com',
+  'sarah@icelandeclipse.com',
+  // Add more internal addresses as needed
+];
+
+const INTERNAL_DOMAINS = [
+  'im-xp.com', // Internal team domain
+];
+
+/**
+ * Check if an email is from an internal sender (should not create tickets)
+ */
+export function isInternalSender(email: string): boolean {
+  const normalized = email.toLowerCase().trim();
+  
+  // Check exact matches
+  if (INTERNAL_SENDERS.includes(normalized)) {
+    return true;
+  }
+  
+  // Check domain matches
+  const domain = normalized.split('@')[1];
+  if (domain && INTERNAL_DOMAINS.includes(domain)) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
  * Check if a message is noise (auto-reply, bounce, etc.)
  */
 export function isNoiseMessage(message: GmailMessage): boolean {
@@ -191,8 +227,11 @@ export function getMessageDirection(fromEmail: string): 'inbound' | 'outbound' {
 
 /**
  * Build Gmail deep link for a thread
+ * Uses the inbox view with thread ID for direct access
  */
 export function buildGmailLink(threadId: string): string {
-  return `https://mail.google.com/mail/?authuser=${SUPPORT_EMAIL}#all/${threadId}`;
+  // Format: /mail/u/0/#inbox/<threadId> for delegated access
+  // The user will be viewing theportalsupport@ mailbox
+  return `https://mail.google.com/mail/u/0/#inbox/${threadId}`;
 }
 

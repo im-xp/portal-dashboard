@@ -14,7 +14,9 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Loader2
+  Loader2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +25,7 @@ interface EmailTicket {
   gmail_thread_id: string;
   customer_email: string;
   subject: string | null;
+  summary: string | null;
   last_inbound_ts: string | null;
   last_outbound_ts: string | null;
   needs_response: boolean;
@@ -59,6 +62,19 @@ export default function EmailQueuePage() {
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
   const [filter, setFilter] = useState<'needs_response' | 'claimed' | 'unclaimed' | 'all'>('needs_response');
   const [error, setError] = useState<string | null>(null);
+  const [expandedTickets, setExpandedTickets] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (ticketKey: string) => {
+    setExpandedTickets(prev => {
+      const next = new Set(prev);
+      if (next.has(ticketKey)) {
+        next.delete(ticketKey);
+      } else {
+        next.add(ticketKey);
+      }
+      return next;
+    });
+  };
 
   // Load current user from localStorage on mount
   useEffect(() => {
@@ -338,43 +354,77 @@ export default function EmailQueuePage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {tickets.map((ticket) => (
+                {tickets.map((ticket) => {
+                  const isExpanded = expandedTickets.has(ticket.ticket_key);
+                  return (
                   <div
                     key={ticket.ticket_key}
                     className={cn(
-                      "flex items-center justify-between p-4 rounded-lg border transition-colors",
+                      "p-4 rounded-lg border transition-colors",
                       ticket.is_stale && "bg-red-50 border-red-200",
                       ticket.claimed_by === currentUser && "bg-blue-50 border-blue-200",
                       !ticket.is_stale && ticket.claimed_by !== currentUser && "hover:bg-zinc-50"
                     )}
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium truncate">
-                          {ticket.customer_email}
-                        </p>
-                        {ticket.is_stale && (
-                          <Badge variant="destructive" className="text-xs">
-                            Stale
-                          </Badge>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">
+                            {ticket.customer_email}
+                          </p>
+                          {ticket.is_stale && (
+                            <Badge variant="destructive" className="text-xs">
+                              Stale
+                            </Badge>
+                          )}
+                          {ticket.claimed_by && (
+                            <Badge 
+                              variant="outline" 
+                              className={cn(
+                                "text-xs",
+                                ticket.claimed_by === currentUser 
+                                  ? "bg-blue-100 text-blue-700 border-blue-200"
+                                  : "bg-zinc-100 text-zinc-600"
+                              )}
+                            >
+                              {`Claimed: ${ticket.claimed_by?.split('@')[0]}`}
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {/* Summary - expandable */}
+                        <button 
+                          onClick={() => toggleExpanded(ticket.ticket_key)}
+                          className="text-left w-full mt-1 group"
+                        >
+                          <p className={cn(
+                            "text-sm text-zinc-600",
+                            !isExpanded && "line-clamp-1"
+                          )}>
+                            {ticket.summary || ticket.subject || '(No subject)'}
+                          </p>
+                          {ticket.summary && (
+                            <span className="text-xs text-blue-500 group-hover:text-blue-700 flex items-center gap-1 mt-1">
+                              {isExpanded ? (
+                                <>
+                                  <ChevronUp className="h-3 w-3" />
+                                  Show less
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="h-3 w-3" />
+                                  Show more
+                                </>
+                              )}
+                            </span>
+                          )}
+                        </button>
+                        
+                        {ticket.subject && (
+                          <p className="text-xs text-zinc-400 truncate mt-1">
+                            Re: {ticket.subject}
+                          </p>
                         )}
-                        {ticket.claimed_by && (
-                          <Badge 
-                            variant="outline" 
-                            className={cn(
-                              "text-xs",
-                              ticket.claimed_by === currentUser 
-                                ? "bg-blue-100 text-blue-700 border-blue-200"
-                                : "bg-zinc-100 text-zinc-600"
-                            )}
-                          >
-                            {`Claimed: ${ticket.claimed_by?.split('@')[0]}`}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-zinc-500 truncate mt-1">
-                        {ticket.subject || '(No subject)'}
-                      </p>
                       <div className="flex items-center gap-4 mt-2 text-xs text-zinc-400">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
@@ -428,8 +478,10 @@ export default function EmailQueuePage() {
                         Gmail
                       </a>
                     </div>
+                    </div>
                   </div>
-                ))}
+                );
+                })}
               </div>
             )}
           </CardContent>

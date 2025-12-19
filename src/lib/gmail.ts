@@ -99,7 +99,7 @@ export async function listMessages(query: string, maxResults = 100): Promise<Gma
 }
 
 /**
- * Get full message details
+ * Get message with metadata only (for sync)
  */
 export async function getMessage(messageId: string): Promise<GmailMessage> {
   const token = await getAccessToken();
@@ -117,6 +117,81 @@ export async function getMessage(messageId: string): Promise<GmailMessage> {
   }
 
   return response.json();
+}
+
+/**
+ * Get full message including body (for AI summarization)
+ */
+export async function getMessageFull(messageId: string): Promise<GmailMessage & { body?: string }> {
+  const token = await getAccessToken();
+
+  const response = await fetch(
+    `${GMAIL_API_BASE}/users/me/messages/${messageId}?format=full`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to get message ${messageId}: ${error}`);
+  }
+
+  const message = await response.json();
+  
+  // Extract body from payload
+  const body = extractBody(message.payload);
+  
+  return { ...message, body };
+}
+
+/**
+ * Extract plain text body from Gmail message payload
+ */
+function extractBody(payload: GmailMessage['payload'] & { body?: { data?: string }; parts?: Array<{ mimeType?: string; body?: { data?: string }; parts?: unknown[] }> }): string {
+  if (!payload) return '';
+
+  // Check for body data directly on payload
+  if (payload.body?.data) {
+    return decodeBase64Url(payload.body.data);
+  }
+
+  // Check parts for text/plain
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/plain' && part.body?.data) {
+        return decodeBase64Url(part.body.data);
+      }
+      // Recursively check nested parts
+      if (part.parts) {
+        const nested = extractBody(part as typeof payload);
+        if (nested) return nested;
+      }
+    }
+    // Fallback to text/html if no plain text
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/html' && part.body?.data) {
+        const html = decodeBase64Url(part.body.data);
+        // Strip HTML tags for plain text
+        return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Decode base64url encoded string
+ */
+function decodeBase64Url(data: string): string {
+  // Replace URL-safe characters and decode
+  const base64 = data.replace(/-/g, '+').replace(/_/g, '/');
+  try {
+    return Buffer.from(base64, 'base64').toString('utf-8');
+  } catch {
+    return '';
+  }
 }
 
 /**

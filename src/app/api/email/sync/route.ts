@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import {
   listMessages,
   getMessage,
+  getMessageFull,
   getHeader,
   parseEmailAddress,
   parseEmailAddresses,
@@ -12,6 +13,7 @@ import {
   isInternalSender,
   getMessageDirection,
 } from '@/lib/gmail';
+import { summarizeEmail } from '@/lib/gemini';
 
 const SUPPORT_EMAIL = process.env.GMAIL_SUPPORT_ADDRESS || 'theportalsupport@icelandeclipse.com';
 
@@ -132,18 +134,41 @@ export async function POST() {
             .single();
 
           if (existingTicket) {
-            // Update existing ticket
+            // Update existing ticket - generate new summary if we don't have one
+            let summary = existingTicket.summary;
+            if (!summary) {
+              try {
+                const fullMessage = await getMessageFull(message.id);
+                if (fullMessage.body) {
+                  summary = await summarizeEmail(fullMessage.body, subject || '');
+                }
+              } catch (e) {
+                console.warn('[Sync] Failed to generate summary:', e);
+              }
+            }
+
             const { error: updateError } = await supabase
               .from('email_tickets')
               .update({
                 subject,
                 last_inbound_ts: internalTs,
+                ...(summary && !existingTicket.summary ? { summary } : {}),
               })
               .eq('ticket_key', ticketKey);
 
             if (!updateError) stats.ticketsUpdated++;
           } else {
-            // Create new ticket
+            // Create new ticket with AI summary
+            let summary: string | null = null;
+            try {
+              const fullMessage = await getMessageFull(message.id);
+              if (fullMessage.body) {
+                summary = await summarizeEmail(fullMessage.body, subject || '');
+              }
+            } catch (e) {
+              console.warn('[Sync] Failed to generate summary:', e);
+            }
+
             const { error: createError } = await supabase
               .from('email_tickets')
               .insert({
@@ -152,6 +177,7 @@ export async function POST() {
                 customer_email: fromEmail,
                 subject,
                 last_inbound_ts: internalTs,
+                summary,
               });
 
             if (!createError) stats.ticketsCreated++;

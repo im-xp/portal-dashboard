@@ -9,7 +9,8 @@ import {
   Users, 
   Package, 
   FileText,
-  RefreshCw 
+  RefreshCw,
+  Mail 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -18,6 +19,7 @@ const navigation = [
   { name: 'People', href: '/people', icon: Users },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Applications', href: '/applications', icon: FileText },
+  { name: 'Email Queue', href: '/email-queue', icon: Mail },
 ];
 
 export function Sidebar() {

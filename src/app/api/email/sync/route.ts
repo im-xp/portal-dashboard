@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase, generateTicketKey } from '@/lib/supabase';
+
+export const dynamic = 'force-dynamic';
 import {
   listMessages,
   getMessage,

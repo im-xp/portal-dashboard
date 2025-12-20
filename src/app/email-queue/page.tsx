@@ -16,7 +16,10 @@ import {
   XCircle,
   Loader2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  MessageSquare,
+  RotateCcw,
+  Reply
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +34,11 @@ interface EmailTicket {
   needs_response: boolean;
   claimed_by: string | null;
   claimed_at: string | null;
+  responded_by: string | null;
+  responded_at: string | null;
+  status: 'awaiting_response' | 'awaiting_customer' | 'resolved';
+  is_followup: boolean;
+  response_count: number;
   created_at: string;
   updated_at: string;
   age_hours: number | null;
@@ -60,7 +68,7 @@ export default function EmailQueuePage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'needs_response' | 'claimed' | 'unclaimed' | 'all'>('needs_response');
+  const [filter, setFilter] = useState<'needs_response' | 'followups' | 'claimed' | 'unclaimed' | 'awaiting_customer' | 'resolved' | 'all'>('needs_response');
   const [error, setError] = useState<string | null>(null);
   const [expandedTickets, setExpandedTickets] = useState<Set<string>>(new Set());
 
@@ -144,7 +152,7 @@ export default function EmailQueuePage() {
     }
   };
 
-  const handleClaim = async (ticketKey: string, action: 'claim' | 'unclaim') => {
+  const handleClaim = async (ticketKey: string, action: 'claim' | 'unclaim' | 'mark_responded' | 'reopen') => {
     if (!currentUser) return;
     setClaimingKey(ticketKey);
     try {
@@ -198,16 +206,21 @@ export default function EmailQueuePage() {
         {/* Status Bar */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
           <div className="flex items-center gap-4">
-            <div className="flex gap-2">
-              {(['needs_response', 'unclaimed', 'claimed', 'all'] as const).map((f) => (
+            <div className="flex gap-2 flex-wrap">
+              {(['needs_response', 'followups', 'unclaimed', 'claimed', 'awaiting_customer', 'resolved', 'all'] as const).map((f) => (
                 <Button
                   key={f}
                   variant={filter === f ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setFilter(f)}
-                  className="capitalize"
+                  className={cn(
+                    "capitalize",
+                    f === 'followups' && "bg-orange-100 hover:bg-orange-200 text-orange-700 border-orange-200"
+                  )}
                 >
-                  {f.replace('_', ' ')}
+                  {f === 'awaiting_customer' ? 'Awaiting Reply' : 
+                   f === 'followups' ? '🔄 Follow-ups' :
+                   f.replace('_', ' ')}
                 </Button>
               ))}
             </div>
@@ -337,8 +350,11 @@ export default function EmailQueuePage() {
             <CardTitle className="text-lg flex items-center gap-2">
               <Mail className="h-5 w-5" />
               {filter === 'needs_response' ? 'Needs Response' : 
+               filter === 'followups' ? 'Follow-up Required' :
                filter === 'claimed' ? 'Claimed Tickets' :
-               filter === 'unclaimed' ? 'Unclaimed Tickets' : 'All Tickets'}
+               filter === 'unclaimed' ? 'Unclaimed Tickets' :
+               filter === 'awaiting_customer' ? 'Awaiting Customer Reply' :
+               filter === 'resolved' ? 'Resolved Tickets' : 'All Tickets'}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -372,9 +388,36 @@ export default function EmailQueuePage() {
                           <p className="text-sm font-medium truncate">
                             {ticket.customer_email}
                           </p>
+                          {ticket.is_followup && ticket.needs_response && (
+                            <Badge 
+                              variant="outline" 
+                              className="text-xs bg-orange-50 text-orange-700 border-orange-200"
+                            >
+                              <Reply className="h-3 w-3 mr-1" />
+                              Follow-up{ticket.response_count > 1 ? ` #${ticket.response_count}` : ''}
+                            </Badge>
+                          )}
                           {ticket.is_stale && (
                             <Badge variant="destructive" className="text-xs">
                               Stale
+                            </Badge>
+                          )}
+                          {ticket.status === 'awaiting_customer' && (
+                            <Badge 
+                              variant="outline" 
+                              className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200"
+                            >
+                              <MessageSquare className="h-3 w-3 mr-1" />
+                              Awaiting Reply
+                            </Badge>
+                          )}
+                          {ticket.status === 'resolved' && (
+                            <Badge 
+                              variant="outline" 
+                              className="text-xs bg-zinc-100 text-zinc-600"
+                            >
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Resolved
                             </Badge>
                           )}
                           {ticket.claimed_by && (
@@ -431,40 +474,93 @@ export default function EmailQueuePage() {
                           {ticket.age_display} ago
                         </span>
                         <span>
-                          Last inbound: {formatTime(ticket.last_inbound_ts)}
+                          Customer: {formatTime(ticket.last_inbound_ts)}
                         </span>
+                        {ticket.last_outbound_ts && (
+                          <span className="text-emerald-600">
+                            Team: {formatTime(ticket.last_outbound_ts)}
+                          </span>
+                        )}
+                        {ticket.responded_by && (
+                          <span className="text-zinc-500">
+                            by {ticket.responded_by.split('@')[0]}
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 ml-4">
-                      {/* Claim/Unclaim Button */}
-                      {ticket.claimed_by === currentUser ? (
+                      {/* Action buttons based on status */}
+                      {ticket.status === 'resolved' ? (
+                        // Resolved tickets - option to reopen
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleClaim(ticket.ticket_key, 'unclaim')}
+                          onClick={() => handleClaim(ticket.ticket_key, 'reopen')}
                           disabled={claimingKey === ticket.ticket_key}
                         >
                           {claimingKey === ticket.ticket_key ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            'Unclaim'
+                            <>
+                              <RotateCcw className="h-4 w-4 mr-1" />
+                              Reopen
+                            </>
                           )}
                         </Button>
-                      ) : !ticket.claimed_by ? (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => handleClaim(ticket.ticket_key, 'claim')}
-                          disabled={claimingKey === ticket.ticket_key}
-                        >
-                          {claimingKey === ticket.ticket_key ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            'Claim'
-                          )}
-                        </Button>
-                      ) : null}
+                      ) : ticket.status === 'awaiting_customer' ? (
+                        // Awaiting customer - no action needed, just viewing
+                        <span className="text-sm text-zinc-400 italic">Awaiting customer</span>
+                      ) : (
+                        // Needs response - show claim/unclaim and responded buttons
+                        <>
+                          {ticket.claimed_by === currentUser ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleClaim(ticket.ticket_key, 'unclaim')}
+                              disabled={claimingKey === ticket.ticket_key}
+                            >
+                              {claimingKey === ticket.ticket_key ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'Unclaim'
+                              )}
+                            </Button>
+                          ) : !ticket.claimed_by ? (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleClaim(ticket.ticket_key, 'claim')}
+                              disabled={claimingKey === ticket.ticket_key}
+                            >
+                              {claimingKey === ticket.ticket_key ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'Claim'
+                              )}
+                            </Button>
+                          ) : null}
+
+                          {/* Responded button - marks ticket as handled */}
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleClaim(ticket.ticket_key, 'mark_responded')}
+                            disabled={claimingKey === ticket.ticket_key}
+                            className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700"
+                          >
+                            {claimingKey === ticket.ticket_key ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Responded
+                              </>
+                            )}
+                          </Button>
+                        </>
+                      )}
 
                       {/* Open in Gmail - search by sender email */}
                       <a
@@ -488,11 +584,15 @@ export default function EmailQueuePage() {
         </Card>
 
         {/* Help Text */}
-        <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-4">
+        <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-4 space-y-2">
           <p className="text-sm text-blue-800">
             <strong>Workflow:</strong> Claim a ticket → Open in Gmail → Reply from{' '}
             <code className="bg-blue-100 px-1 rounded">theportalsupport@icelandeclipse.com</code> →
-            {' '}Ticket will auto-clear on next sync.
+            {' '}Click <strong>Responded</strong> or wait for auto-sync.
+          </p>
+          <p className="text-sm text-blue-700">
+            <strong>Status tracking:</strong> When you mark a ticket as responded, it moves to &quot;Awaiting Reply&quot;.
+            If the customer responds again, it automatically pops back to &quot;Needs Response&quot;.
           </p>
         </div>
       </div>

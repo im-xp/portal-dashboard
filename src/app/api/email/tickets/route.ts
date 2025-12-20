@@ -20,11 +20,23 @@ export async function GET(request: NextRequest) {
       case 'needs_response':
         query = query.eq('needs_response', true);
         break;
+      case 'followups':
+        // Tickets where customer responded to our response
+        query = query.eq('is_followup', true).eq('needs_response', true);
+        break;
       case 'claimed':
         query = query.not('claimed_by', 'is', null);
         break;
       case 'unclaimed':
         query = query.is('claimed_by', null).eq('needs_response', true);
+        break;
+      case 'awaiting_customer':
+        // Tickets we've responded to, waiting for customer reply
+        query = query.eq('status', 'awaiting_customer');
+        break;
+      case 'resolved':
+        // Manually resolved tickets
+        query = query.eq('status', 'resolved');
         break;
       case 'all':
         // No filter

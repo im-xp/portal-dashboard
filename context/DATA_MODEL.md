@@ -11,14 +11,14 @@ Auth Header: xc-token: <token>
 
 ## Tables & IDs
 
-| Table | Table ID | Description |
-|-------|----------|-------------|
+| Table          | Table ID          | Description                                |
+| -------------- | ----------------- | ------------------------------------------ |
 | `applications` | `mhiveeaf8gb9kvy` | Form submissions (one per human per popup) |
-| `attendees` | `mduqna6ve55k8wi` | People on an application (main + family) |
-| `products` | `mjt8xx9ltkhfcbu` | Purchasable items (passes, lodging) |
-| `humans` | TBD | Core identity table |
-| `payments` | TBD | Checkout sessions |
-| `popups` | TBD | Events/cities |
+| `attendees`    | `mduqna6ve55k8wi` | People on an application (main + family)   |
+| `products`     | `mjt8xx9ltkhfcbu` | Purchasable items (passes, lodging)        |
+| `humans`       | TBD               | Core identity table                        |
+| `payments`     | TBD               | Checkout sessions                          |
+| `popups`       | TBD               | Events/cities                              |
 
 ---
 
@@ -75,58 +75,59 @@ GET /tables/mduqna6ve55k8wi/links/cjc8h3w216z8n9j/records/4
 
 ### applications
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | int | Primary key |
-| `first_name` | string | Applicant first name |
-| `last_name` | string | Applicant last name |
-| `email` | string | Contact email |
-| `telegram` | string | Telegram handle |
-| `organization` | string | Company/org |
-| `status` | string | `draft`, `in review`, `accepted`, `rejected` |
-| `submitted_at` | datetime | When submitted |
-| `accepted_at` | datetime | When accepted |
-| `citizen_id` | int | FK to humans |
-| `popup_city_id` | int | FK to popups |
-| `popups` | object | Nested popup info `{id, name}` |
-| `humans` | object | Nested human info `{id, primary_email}` |
-| `attendees` | int | Count of linked attendees |
-| `payments` | int | Count of linked payments |
+| Field           | Type     | Description                                  |
+| --------------- | -------- | -------------------------------------------- |
+| `id`            | int      | Primary key                                  |
+| `first_name`    | string   | Applicant first name                         |
+| `last_name`     | string   | Applicant last name                          |
+| `email`         | string   | Contact email                                |
+| `telegram`      | string   | Telegram handle                              |
+| `organization`  | string   | Company/org                                  |
+| `status`        | string   | `draft`, `in review`, `accepted`, `rejected` |
+| `submitted_at`  | datetime | When submitted                               |
+| `accepted_at`   | datetime | When accepted                                |
+| `citizen_id`    | int      | FK to humans                                 |
+| `popup_city_id` | int      | FK to popups                                 |
+| `popups`        | object   | Nested popup info `{id, name}`               |
+| `humans`        | object   | Nested human info `{id, primary_email}`      |
+| `attendees`     | int      | Count of linked attendees                    |
+| `payments`      | int      | Count of linked payments                     |
 
 ### attendees
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | int | Primary key |
-| `application_id` | int | FK to applications |
-| `name` | string | Full name |
-| `email` | string | Contact email |
-| `category` | string | `main`, `spouse`, `kid`, `baby`, `teen` |
-| `gender` | string | Gender |
-| `check_in_code` | string | QR code (e.g., `ICEQPGB`) |
-| `poap_url` | string | POAP NFT link |
-| `applications` | object | Nested app info `{id, first_name}` |
-| `products` | int | Count of linked products |
-| `attendee_products` | int | Count in junction table |
+| Field               | Type   | Description                             |
+| ------------------- | ------ | --------------------------------------- |
+| `id`                | int    | Primary key                             |
+| `application_id`    | int    | FK to applications                      |
+| `name`              | string | Full name                               |
+| `email`             | string | Contact email                           |
+| `category`          | string | `main`, `spouse`, `kid`, `baby`, `teen` |
+| `gender`            | string | Gender                                  |
+| `check_in_code`     | string | QR code (e.g., `ICEQPGB`)               |
+| `poap_url`          | string | POAP NFT link                           |
+| `applications`      | object | Nested app info `{id, first_name}`      |
+| `products`          | int    | Count of linked products                |
+| `attendee_products` | int    | Count in junction table                 |
 
 **Link Column IDs:**
+
 - Products link: `cjc8h3w216z8n9j`
 - Attendee products link: `chpl496x8yj44hf`
 
 ### products
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | int | Primary key |
-| `name` | string | Product name |
-| `slug` | string | URL-safe name |
-| `price` | float | Price in USD |
-| `compare_price` | float | Original/strikethrough price |
-| `description` | string | Product details |
-| `category` | string | `week`, `month`, `day`, `patreon`, etc. |
-| `attendee_category` | string | `main`, `spouse`, `kid` |
-| `is_active` | boolean | Currently purchasable |
-| `popup_city_id` | int | FK to popups |
+| Field               | Type    | Description                             |
+| ------------------- | ------- | --------------------------------------- |
+| `id`                | int     | Primary key                             |
+| `name`              | string  | Product name                            |
+| `slug`              | string  | URL-safe name                           |
+| `price`             | float   | Price in USD                            |
+| `compare_price`     | float   | Original/strikethrough price            |
+| `description`       | string  | Product details                         |
+| `category`          | string  | `week`, `month`, `day`, `patreon`, etc. |
+| `attendee_category` | string  | `main`, `spouse`, `kid`                 |
+| `is_active`         | boolean | Currently purchasable                   |
+| `popup_city_id`     | int     | FK to popups                            |
 
 ---
 
@@ -174,29 +175,30 @@ const statusCounts = applications.reduce((acc, app) => {
 }, {});
 
 // Sum revenue by product
-const revenueByProduct = attendees.flatMap(a => a.products).reduce((acc, p) => {
-  acc[p.name] = (acc[p.name] || 0) + p.price;
-  return acc;
-}, {});
+const revenueByProduct = attendees
+  .flatMap((a) => a.products)
+  .reduce((acc, p) => {
+    acc[p.name] = (acc[p.name] || 0) + p.price;
+    return acc;
+  }, {});
 ```
 
 ---
 
 ## Current Data Snapshot (Dec 17, 2025)
 
-| Metric | Value |
-|--------|-------|
-| Total Applications | 6 |
-| Accepted | 6 (100%) |
-| With Purchases | 3 (50%) |
-| Products Sold | 11 items |
+| Metric             | Value    |
+| ------------------ | -------- |
+| Total Applications | 6        |
+| Accepted           | 6 (100%) |
+| With Purchases     | 3 (50%)  |
+| Products Sold      | 11 items |
 
-| Applicant | Products |
-|-----------|----------|
-| MItch Morales | Portal Patron |
-| Jon Shapirop | 8 items (test data) |
-| MaryLiz Bender | Portal Entry Pass, Bed (6-person dorm) |
-| james ellington | - |
-| Mia Hanak | - |
-| Laila Keren | - |
-
+| Applicant       | Products                               |
+| --------------- | -------------------------------------- |
+| MItch Morales   | Portal Patron                          |
+| Jon Shapirop    | 8 items (test data)                    |
+| MaryLiz Bender  | Portal Entry Pass, Bed (6-person dorm) |
+| james ellington | -                                      |
+| Mia Hanak       | -                                      |
+| Laila Keren     | -                                      |

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 interface ClaimRequest {
   ticket_key: string;
   user_email: string;
-  action: 'claim' | 'unclaim';
+  action: 'claim' | 'unclaim' | 'mark_responded' | 'reopen';
 }
 
 export async function POST(request: NextRequest) {
@@ -91,9 +91,60 @@ export async function POST(request: NextRequest) {
         ticket: data,
         action: 'unclaimed',
       });
+    } else if (action === 'mark_responded') {
+      // Mark a ticket as responded - sets last_outbound_ts to now
+      // This clears needs_response and records who marked it
+      const now = new Date().toISOString();
+      
+      const { data, error } = await supabase
+        .from('email_tickets')
+        .update({
+          last_outbound_ts: now,
+          responded_by: user_email,
+          responded_at: now,
+          status: 'awaiting_customer',
+          // Clear the claim since it's handled
+          claimed_by: null,
+          claimed_at: null,
+        })
+        .eq('ticket_key', ticket_key)
+        .select()
+        .single();
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        ticket: data,
+        action: 'marked_responded',
+      });
+    } else if (action === 'reopen') {
+      // Reopen a resolved ticket - sets it back to awaiting_response
+      const { data, error } = await supabase
+        .from('email_tickets')
+        .update({
+          status: 'awaiting_response',
+          responded_by: null,
+          responded_at: null,
+        })
+        .eq('ticket_key', ticket_key)
+        .select()
+        .single();
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        ticket: data,
+        action: 'reopened',
+      });
     } else {
       return NextResponse.json(
-        { error: 'Invalid action. Use "claim" or "unclaim"' },
+        { error: 'Invalid action. Use "claim", "unclaim", "mark_responded", or "reopen"' },
         { status: 400 }
       );
     }

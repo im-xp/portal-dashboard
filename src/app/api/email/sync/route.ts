@@ -176,11 +176,22 @@ export async function POST() {
               }
             }
 
+            // Check if this is a follow-up (customer responding after we responded)
+            const isFollowup = existingTicket.last_outbound_ts !== null;
+            const newResponseCount = isFollowup 
+              ? (existingTicket.response_count || 0) + 1 
+              : (existingTicket.response_count || 0);
+
             const { error: updateError } = await supabase
               .from('email_tickets')
               .update({
                 subject: isForward ? subject?.replace(/^Fwd:\s*/i, '') : subject,
                 last_inbound_ts: internalTs,
+                // Customer responded - set status back to awaiting_response
+                status: 'awaiting_response',
+                // Mark as follow-up if we had already responded
+                is_followup: isFollowup,
+                response_count: newResponseCount,
                 ...(summary && !existingTicket.summary ? { summary } : {}),
               })
               .eq('ticket_key', ticketKey);
@@ -222,7 +233,14 @@ export async function POST() {
             
             const { error: updateError } = await supabase
               .from('email_tickets')
-              .update({ last_outbound_ts: internalTs })
+              .update({ 
+                last_outbound_ts: internalTs,
+                // Team responded - now awaiting customer
+                status: 'awaiting_customer',
+                // Clear claim since it's handled
+                claimed_by: null,
+                claimed_at: null,
+              })
               .eq('ticket_key', ticketKey);
 
             if (!updateError) stats.ticketsUpdated++;

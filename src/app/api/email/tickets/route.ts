@@ -60,8 +60,9 @@ export async function GET(request: NextRequest) {
         ? Math.floor((now.getTime() - lastInbound.getTime()) / (1000 * 60 * 60))
         : null;
 
-      // Check if claim is stale (> 24 hours)
-      const isStale = claimedAt 
+      // Check if claim is stale (> 24 hours AND still needs response)
+      // If it's been responded to, it's not stale even if old
+      const isStale = ticket.needs_response && claimedAt 
         ? (now.getTime() - claimedAt.getTime()) > 24 * 60 * 60 * 1000
         : false;
 

@@ -542,21 +542,17 @@ export default function EmailQueuePage() {
                             </Button>
                           ) : null}
 
-                          {/* Responded button - marks ticket as handled */}
+                          {/* Mark as Replied - marks ticket as handled */}
                           <Button
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
                             onClick={() => handleClaim(ticket.ticket_key, 'mark_responded')}
                             disabled={claimingKey === ticket.ticket_key}
-                            className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700"
                           >
                             {claimingKey === ticket.ticket_key ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
-                              <>
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                Responded
-                              </>
+                              'Mark Replied'
                             )}
                           </Button>
                         </>

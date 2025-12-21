@@ -22,9 +22,26 @@ export default async function ProductsPage() {
 
   // Build product sales DIRECTLY from payment_products (not attendee_products)
   // This ensures the table matches the category breakdown and totals
+  // 
+  // IMPORTANT: Discount codes are applied at the payment level, so we need to
+  // distribute the discount proportionally across payment products
   const productPaymentData = payments
     .filter(p => p.status === 'pending' || p.status === 'approved')
-    .flatMap(p => p.paymentProducts.map(pp => ({ ...pp, paymentStatus: p.status })))
+    .flatMap(p => {
+      // Calculate the list price total for this payment to distribute discount
+      const listPriceTotal = p.paymentProducts.reduce(
+        (sum, pp) => sum + pp.product_price * pp.quantity, 0
+      );
+      // Discount multiplier: if there's a discount, use actual amount / list total
+      // This correctly handles any discount (percentage, flat, etc.)
+      const discountMultiplier = listPriceTotal > 0 ? p.amount / listPriceTotal : 1;
+      
+      return p.paymentProducts.map(pp => ({ 
+        ...pp, 
+        paymentStatus: p.status,
+        discountMultiplier,
+      }));
+    })
     .reduce((acc, pp) => {
       if (!acc[pp.product_id]) {
         acc[pp.product_id] = { 
@@ -36,7 +53,8 @@ export default async function ProductsPage() {
           productCategory: pp.product_category,
         };
       }
-      const amount = pp.product_price * pp.quantity;
+      // Apply discount multiplier to get actual revenue (not list price)
+      const amount = pp.product_price * pp.quantity * pp.discountMultiplier;
       if (pp.paymentStatus === 'approved') {
         acc[pp.product_id].soldQuantity += pp.quantity;
         acc[pp.product_id].approvedRevenue += amount;
@@ -74,9 +92,25 @@ export default async function ProductsPage() {
 
   // Category breakdown calculated DIRECTLY from payment_products (not via attendee_products)
   // This ensures the numbers match the payment totals exactly
+  // 
+  // IMPORTANT: Discount codes are applied at the payment level, so we need to
+  // distribute the discount proportionally across payment products
   const categorySales = payments
     .filter(p => p.status === 'pending' || p.status === 'approved')
-    .flatMap(p => p.paymentProducts.map(pp => ({ ...pp, paymentStatus: p.status })))
+    .flatMap(p => {
+      // Calculate the list price total for this payment to distribute discount
+      const listPriceTotal = p.paymentProducts.reduce(
+        (sum, pp) => sum + pp.product_price * pp.quantity, 0
+      );
+      // Discount multiplier: if there's a discount, use actual amount / list total
+      const discountMultiplier = listPriceTotal > 0 ? p.amount / listPriceTotal : 1;
+      
+      return p.paymentProducts.map(pp => ({ 
+        ...pp, 
+        paymentStatus: p.status,
+        discountMultiplier,
+      }));
+    })
     .reduce((acc, pp) => {
       const category = pp.product_category || 'other';
       if (!acc[category]) {
@@ -87,7 +121,8 @@ export default async function ProductsPage() {
           pendingRevenue: 0 
         };
       }
-      const amount = pp.product_price * pp.quantity;
+      // Apply discount multiplier to get actual revenue (not list price)
+      const amount = pp.product_price * pp.quantity * pp.discountMultiplier;
       if (pp.paymentStatus === 'approved') {
         acc[category].soldQuantity += pp.quantity;
         acc[category].approvedRevenue += amount;

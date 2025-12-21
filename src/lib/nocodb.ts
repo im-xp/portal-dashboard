@@ -311,6 +311,8 @@ export async function getDashboardData(): Promise<DashboardData> {
   // === PRODUCT SALES AGGREGATION ===
   
   // Build a map of actual revenue from payment_products (price at time of purchase)
+  // IMPORTANT: Discount codes are applied at the payment level, so we distribute
+  // the discount proportionally across payment products
   const actualRevenueByProduct = new Map<number, { 
     revenue: number; 
     quantity: number;
@@ -319,6 +321,13 @@ export async function getDashboardData(): Promise<DashboardData> {
   }>();
 
   for (const payment of paymentsWithProducts) {
+    // Calculate the list price total for this payment to distribute discount
+    const listPriceTotal = payment.paymentProducts.reduce(
+      (sum, pp) => sum + pp.product_price * pp.quantity, 0
+    );
+    // Discount multiplier: if there's a discount, use actual amount / list total
+    const discountMultiplier = listPriceTotal > 0 ? payment.amount / listPriceTotal : 1;
+    
     for (const pp of payment.paymentProducts) {
       const existing = actualRevenueByProduct.get(pp.product_id) || {
         revenue: 0,
@@ -326,7 +335,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         hasPending: false,
         hasApproved: false,
       };
-      existing.revenue += pp.product_price * pp.quantity;
+      // Apply discount multiplier to get actual revenue (not list price)
+      existing.revenue += pp.product_price * pp.quantity * discountMultiplier;
       existing.quantity += pp.quantity;
       if (payment.status === 'pending') existing.hasPending = true;
       if (payment.status === 'approved') existing.hasApproved = true;

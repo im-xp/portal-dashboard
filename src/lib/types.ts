@@ -77,6 +77,8 @@ export interface Product {
   popup_city_id: number;
   start_date: string | null;
   end_date: string | null;
+  max_inventory: number | null;  // NULL = unlimited
+  current_sold: number;          // Default 0
 }
 
 export interface LinkedProduct {

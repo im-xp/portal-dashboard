@@ -241,12 +241,13 @@ export default async function ProductsPage() {
               <CardTitle className="text-base md:text-lg">All Products</CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <Table className="min-w-[600px]">
+              <Table className="min-w-[700px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Product</TableHead>
                     <TableHead>Price</TableHead>
                     <TableHead>Category</TableHead>
+                    <TableHead className="text-center">Inventory</TableHead>
                     <TableHead className="text-right text-emerald-700">Sold</TableHead>
                     <TableHead className="text-right text-amber-700">In Carts</TableHead>
                     <TableHead className="text-right text-emerald-700">Approved $</TableHead>
@@ -271,6 +272,36 @@ export default async function ProductsPage() {
                         <Badge variant="outline" className="capitalize">
                           {product.category || 'other'}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {product.max_inventory !== null ? (
+                          <div className="min-w-[80px]">
+                            <div className="flex items-center justify-between text-sm mb-1">
+                              <span className="font-medium">
+                                {product.current_sold || 0} / {product.max_inventory}
+                              </span>
+                              {(product.current_sold || 0) >= product.max_inventory && (
+                                <Badge variant="destructive" className="text-[10px] px-1 py-0 ml-1">
+                                  SOLD OUT
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all ${
+                                  (product.current_sold || 0) >= product.max_inventory 
+                                    ? 'bg-red-500' 
+                                    : (product.current_sold || 0) >= product.max_inventory * 0.8
+                                    ? 'bg-amber-500'
+                                    : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${Math.min(100, ((product.current_sold || 0) / product.max_inventory) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-zinc-400 text-sm">∞</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         {product.sales.soldQuantity > 0 ? (

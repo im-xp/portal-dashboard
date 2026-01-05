@@ -25,8 +25,10 @@ export default async function ProductsPage() {
   // 
   // IMPORTANT: Discount codes are applied at the payment level, so we need to
   // distribute the discount proportionally across payment products
+  // NOTE: Only approved payments - pending payments in DB are meaningless.
+  // Pending columns kept in UI for future cart feature but hardcoded to 0.
   const productPaymentData = payments
-    .filter(p => p.status === 'pending' || p.status === 'approved')
+    .filter(p => p.status === 'approved')
     .flatMap(p => {
       // Calculate the list price total for this payment to distribute discount
       const listPriceTotal = p.paymentProducts.reduce(
@@ -38,7 +40,6 @@ export default async function ProductsPage() {
       
       return p.paymentProducts.map(pp => ({ 
         ...pp, 
-        paymentStatus: p.status,
         discountMultiplier,
       }));
     })
@@ -46,22 +47,17 @@ export default async function ProductsPage() {
       if (!acc[pp.product_id]) {
         acc[pp.product_id] = { 
           soldQuantity: 0,      // From approved payments
-          inCheckoutQuantity: 0, // From pending payments
+          inCheckoutQuantity: 0, // Hardcoded to 0 - pending payments meaningless
           approvedRevenue: 0,
-          pendingRevenue: 0,
+          pendingRevenue: 0,    // Hardcoded to 0 - pending payments meaningless
           productName: pp.product_name,
           productCategory: pp.product_category,
         };
       }
       // Apply discount multiplier to get actual revenue (not list price)
       const amount = pp.product_price * pp.quantity * pp.discountMultiplier;
-      if (pp.paymentStatus === 'approved') {
-        acc[pp.product_id].soldQuantity += pp.quantity;
-        acc[pp.product_id].approvedRevenue += amount;
-      } else {
-        acc[pp.product_id].inCheckoutQuantity += pp.quantity;
-        acc[pp.product_id].pendingRevenue += amount;
-      }
+      acc[pp.product_id].soldQuantity += pp.quantity;
+      acc[pp.product_id].approvedRevenue += amount;
       return acc;
     }, {} as Record<number, { 
       soldQuantity: number;
@@ -83,11 +79,9 @@ export default async function ProductsPage() {
     },
   }));
 
-  // Sort by total revenue (approved + pending, highest first)
+  // Sort by revenue (highest first)
   const sortedProducts = productsWithSales.sort((a, b) => {
-    const aTotal = (a.sales.approvedRevenue || 0) + (a.sales.pendingRevenue || 0);
-    const bTotal = (b.sales.approvedRevenue || 0) + (b.sales.pendingRevenue || 0);
-    return bTotal - aTotal;
+    return (b.sales.approvedRevenue || 0) - (a.sales.approvedRevenue || 0);
   });
 
   // Category breakdown calculated DIRECTLY from payment_products (not via attendee_products)
@@ -95,8 +89,10 @@ export default async function ProductsPage() {
   // 
   // IMPORTANT: Discount codes are applied at the payment level, so we need to
   // distribute the discount proportionally across payment products
+  // NOTE: Only approved payments - pending payments in DB are meaningless.
+  // inCartQuantity and pendingRevenue kept in structure for future cart feature but hardcoded to 0.
   const categorySales = payments
-    .filter(p => p.status === 'pending' || p.status === 'approved')
+    .filter(p => p.status === 'approved')
     .flatMap(p => {
       // Calculate the list price total for this payment to distribute discount
       const listPriceTotal = p.paymentProducts.reduce(
@@ -107,7 +103,6 @@ export default async function ProductsPage() {
       
       return p.paymentProducts.map(pp => ({ 
         ...pp, 
-        paymentStatus: p.status,
         discountMultiplier,
       }));
     })
@@ -116,20 +111,15 @@ export default async function ProductsPage() {
       if (!acc[category]) {
         acc[category] = { 
           soldQuantity: 0, 
-          inCartQuantity: 0,
+          inCartQuantity: 0,      // Hardcoded to 0 - pending payments meaningless
           approvedRevenue: 0, 
-          pendingRevenue: 0 
+          pendingRevenue: 0       // Hardcoded to 0 - pending payments meaningless
         };
       }
       // Apply discount multiplier to get actual revenue (not list price)
       const amount = pp.product_price * pp.quantity * pp.discountMultiplier;
-      if (pp.paymentStatus === 'approved') {
-        acc[category].soldQuantity += pp.quantity;
-        acc[category].approvedRevenue += amount;
-      } else {
-        acc[category].inCartQuantity += pp.quantity;
-        acc[category].pendingRevenue += amount;
-      }
+      acc[category].soldQuantity += pp.quantity;
+      acc[category].approvedRevenue += amount;
       return acc;
     }, {} as Record<string, { 
       soldQuantity: number; 
@@ -212,7 +202,7 @@ export default async function ProductsPage() {
             <CardContent>
               <div className="space-y-4">
                 {Object.entries(categorySales)
-                  .sort(([, a], [, b]) => (b.approvedRevenue + b.pendingRevenue) - (a.approvedRevenue + a.pendingRevenue))
+                  .sort(([, a], [, b]) => b.approvedRevenue - a.approvedRevenue)
                   .map(([category, data]) => (
                     <div key={category} className="border-b border-zinc-100 pb-3 last:border-0 last:pb-0">
                       <div className="flex items-center justify-between mb-2">

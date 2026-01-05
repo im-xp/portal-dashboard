@@ -204,56 +204,49 @@ export async function getDashboardData(): Promise<DashboardData> {
   }));
 
   // Build per-attendee product maps from payment data
+  // NOTE: We only track approved payments now. Pending payments in the DB are meaningless.
+  // inCartByAttendee is kept empty for future cart feature.
   const soldByAttendee = new Map<number, AttendeeProductWithStatus[]>();
   const inCartByAttendee = new Map<number, AttendeeProductWithStatus[]>();
 
   for (const payment of paymentsWithProducts) {
-    const targetMap = payment.status === 'approved' ? soldByAttendee : 
-                      payment.status === 'pending' ? inCartByAttendee : null;
-    
-    if (!targetMap) continue; // Skip expired/failed payments
+    // Only process approved payments - pending payments are meaningless in current DB
+    if (payment.status !== 'approved') continue;
     
     for (const pp of payment.paymentProducts) {
-      const existing = targetMap.get(pp.attendee_id) || [];
+      const existing = soldByAttendee.get(pp.attendee_id) || [];
       existing.push({
         id: pp.product_id,
         name: pp.product_name,
         price: pp.product_price,
         quantity: pp.quantity,
         category: pp.product_category || 'other',
-        status: payment.status === 'approved' ? 'sold' : 'in_cart',
+        status: 'sold',
       });
-      targetMap.set(pp.attendee_id, existing);
+      soldByAttendee.set(pp.attendee_id, existing);
     }
   }
 
   // Calculate journey stage for each attendee
+  // NOTE: in_cart stage is kept for future cart feature but currently won't be triggered
   function calculateJourneyStage(
     soldProducts: AttendeeProductWithStatus[],
-    inCartProducts: AttendeeProductWithStatus[]
+    _inCartProducts: AttendeeProductWithStatus[]
   ): { stage: JourneyStage; hasPass: boolean; hasLodging: boolean } {
-    // Check sold products (approved payments)
+    // Check sold products (approved payments only)
     const soldPass = soldProducts.some(p => p.category === 'month');
     const soldLodging = soldProducts.some(p => p.category === 'lodging');
-    
-    // Check in-cart products (pending payments)
-    const inCartPass = inCartProducts.some(p => p.category === 'month');
-    const inCartLodging = inCartProducts.some(p => p.category === 'lodging');
     
     const hasPass = soldPass;
     const hasLodging = soldLodging;
     
-    // Determine stage based on what they've PAID for (not just in cart)
+    // Determine stage based on what they've PAID for
     if (soldPass && soldLodging) {
       return { stage: 'confirmed', hasPass: true, hasLodging: true };
     }
     
     if (soldPass || soldLodging) {
       return { stage: 'partial', hasPass, hasLodging };
-    }
-    
-    if (inCartPass || inCartLodging) {
-      return { stage: 'in_cart', hasPass: false, hasLodging: false };
     }
     
     return { stage: 'accepted', hasPass: false, hasLodging: false };
@@ -280,47 +273,43 @@ export async function getDashboardData(): Promise<DashboardData> {
   const acceptedApplications = applications.filter(a => a.status === 'accepted').length;
 
   // === REVENUE CALCULATIONS FROM PAYMENTS ===
-  // (paymentsWithProducts already computed above for per-attendee data)
+  // NOTE: Pending payments in DB are meaningless, so we only count approved payments.
+  // Pending metrics are hardcoded to 0 but kept in the structure for future cart feature.
 
-  // Calculate revenue by payment status
   const approvedPayments = paymentsWithProducts.filter(p => p.status === 'approved');
-  const pendingPayments = paymentsWithProducts.filter(p => p.status === 'pending');
 
   const approvedRevenue = approvedPayments.reduce((sum, p) => sum + p.amount, 0);
-  const pendingRevenue = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
 
   const revenue: RevenueMetrics = {
     approvedRevenue,
-    pendingRevenue,
-    totalRevenue: approvedRevenue + pendingRevenue,
+    pendingRevenue: 0,  // Hardcoded - pending payments in DB are meaningless
+    totalRevenue: approvedRevenue,
     approvedPaymentsCount: approvedPayments.length,
-    pendingPaymentsCount: pendingPayments.length,
+    pendingPaymentsCount: 0,  // Hardcoded - pending payments in DB are meaningless
   };
 
-  // Get attendee IDs with approved/pending payments
+  // Get attendee IDs with approved payments only
   const attendeeIdsWithApproved = new Set(
     approvedPayments.flatMap(p => p.paymentProducts.map(pp => pp.attendee_id))
   );
-  const attendeeIdsWithPending = new Set(
-    pendingPayments.flatMap(p => p.paymentProducts.map(pp => pp.attendee_id))
-  );
 
   const paidAttendees = attendeeIdsWithApproved.size;
-  const pendingAttendees = attendeeIdsWithPending.size;
+  const pendingAttendees = 0;  // Hardcoded - pending payments in DB are meaningless
 
   // === PRODUCT SALES AGGREGATION ===
   
   // Build a map of actual revenue from payment_products (price at time of purchase)
   // IMPORTANT: Discount codes are applied at the payment level, so we distribute
   // the discount proportionally across payment products
+  // NOTE: Only approved payments - pending payments in DB are meaningless
   const actualRevenueByProduct = new Map<number, { 
     revenue: number; 
     quantity: number;
-    hasPending: boolean;
+    hasPending: boolean;  // Kept for future cart feature, will always be false
     hasApproved: boolean;
   }>();
 
-  for (const payment of paymentsWithProducts) {
+  for (const payment of approvedPayments) {
     // Calculate the list price total for this payment to distribute discount
     const listPriceTotal = payment.paymentProducts.reduce(
       (sum, pp) => sum + pp.product_price * pp.quantity, 0
@@ -338,8 +327,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       // Apply discount multiplier to get actual revenue (not list price)
       existing.revenue += pp.product_price * pp.quantity * discountMultiplier;
       existing.quantity += pp.quantity;
-      if (payment.status === 'pending') existing.hasPending = true;
-      if (payment.status === 'approved') existing.hasApproved = true;
+      existing.hasApproved = true;
       actualRevenueByProduct.set(pp.product_id, existing);
     }
   }

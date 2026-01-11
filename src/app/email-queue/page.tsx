@@ -1,16 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
-  Mail, 
-  RefreshCw, 
-  ExternalLink, 
-  Clock, 
-  User, 
+import {
+  Mail,
+  RefreshCw,
+  ExternalLink,
+  Clock,
+  User,
   AlertTriangle,
   CheckCircle,
   XCircle,
@@ -22,6 +23,9 @@ import {
   Reply
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TicketNotes } from '@/components/email/TicketNotes';
+import { TicketActivity } from '@/components/email/TicketActivity';
+import { ComposeResponse } from '@/components/email/ComposeResponse';
 
 interface EmailTicket {
   ticket_key: string;
@@ -53,17 +57,10 @@ interface SyncStatus {
   messageCount: number;
 }
 
-// Team members who can claim tickets
-const TEAM_MEMBERS = [
-  'jon@im-xp.com',
-  'maryliz@im-xp.com',
-  'mitch@im-xp.com',
-  'james@im-xp.com',
-];
-
 export default function EmailQueuePage() {
+  const { data: session } = useSession();
+  const currentUser = session?.user?.email || '';
   const [tickets, setTickets] = useState<EmailTicket[]>([]);
-  const [currentUser, setCurrentUser] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -71,6 +68,7 @@ export default function EmailQueuePage() {
   const [filter, setFilter] = useState<'needs_response' | 'followups' | 'claimed' | 'unclaimed' | 'awaiting_customer' | 'resolved' | 'all'>('needs_response');
   const [error, setError] = useState<string | null>(null);
   const [expandedTickets, setExpandedTickets] = useState<Set<string>>(new Set());
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
 
   const toggleExpanded = (ticketKey: string) => {
     setExpandedTickets(prev => {
@@ -82,22 +80,6 @@ export default function EmailQueuePage() {
       }
       return next;
     });
-  };
-
-  // Load current user from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('email-queue-user');
-    if (saved && TEAM_MEMBERS.includes(saved)) {
-      setCurrentUser(saved);
-    } else {
-      setCurrentUser(TEAM_MEMBERS[0]);
-    }
-  }, []);
-
-  // Save current user to localStorage when changed
-  const handleUserChange = (email: string) => {
-    setCurrentUser(email);
-    localStorage.setItem('email-queue-user', email);
   };
 
   const fetchTickets = useCallback(async () => {
@@ -227,22 +209,6 @@ export default function EmailQueuePage() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* User Selector */}
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-zinc-400" />
-              <select
-                value={currentUser}
-                onChange={(e) => handleUserChange(e.target.value)}
-                className="text-sm border rounded-md px-2 py-1 bg-white"
-              >
-                {TEAM_MEMBERS.map((email) => (
-                  <option key={email} value={email}>
-                    {email.split('@')[0]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {syncStatus && (
               <div className="text-sm text-zinc-500">
                 {syncStatus.configured ? (
@@ -269,6 +235,18 @@ export default function EmailQueuePage() {
               {syncing ? 'Syncing...' : 'Sync Now'}
             </Button>
           </div>
+        </div>
+
+        {/* Help Text */}
+        <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 p-4 space-y-2">
+          <p className="text-sm text-blue-800">
+            <strong>Workflow:</strong> Claim a ticket → Click <strong>Reply</strong> to compose your response →
+            Send directly from this dashboard. Your reply will be sent from your Google account.
+          </p>
+          <p className="text-sm text-blue-700">
+            <strong>Subject changes:</strong> If you change the subject, a new thread will be created in Gmail.
+            The system will still track it as part of the same ticket.
+          </p>
         </div>
 
         {/* Error Banner */}
@@ -468,6 +446,15 @@ export default function EmailQueuePage() {
                             Re: {ticket.subject}
                           </p>
                         )}
+
+                        {/* Notes and Activity - shown when expanded */}
+                        {isExpanded && (
+                          <div className="mt-4 pt-4 border-t border-zinc-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <TicketNotes ticketKey={ticket.ticket_key} currentUser={currentUser} />
+                            <TicketActivity ticketKey={ticket.ticket_key} />
+                          </div>
+                        )}
+
                       <div className="flex items-center gap-4 mt-2 text-xs text-zinc-400">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
@@ -542,6 +529,20 @@ export default function EmailQueuePage() {
                             </Button>
                           ) : null}
 
+                          {/* Reply from Dashboard */}
+                          {ticket.claimed_by === currentUser && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => setReplyingTo(ticket.ticket_key)}
+                              disabled={replyingTo === ticket.ticket_key}
+                              className="gap-1"
+                            >
+                              <Reply className="h-4 w-4" />
+                              Reply
+                            </Button>
+                          )}
+
                           {/* Mark as Replied - marks ticket as handled */}
                           <Button
                             variant="outline"
@@ -571,6 +572,23 @@ export default function EmailQueuePage() {
                       </a>
                     </div>
                     </div>
+
+                    {/* Compose Response Form */}
+                    {replyingTo === ticket.ticket_key && (
+                      <div className="mt-4 pt-4 border-t border-zinc-200">
+                        <ComposeResponse
+                          ticketKey={ticket.ticket_key}
+                          customerEmail={ticket.customer_email}
+                          originalSubject={ticket.subject || ''}
+                          threadId={ticket.gmail_thread_id}
+                          onSent={() => {
+                            setReplyingTo(null);
+                            fetchTickets();
+                          }}
+                          onCancel={() => setReplyingTo(null)}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
                 })}
@@ -578,19 +596,6 @@ export default function EmailQueuePage() {
             )}
           </CardContent>
         </Card>
-
-        {/* Help Text */}
-        <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-4 space-y-2">
-          <p className="text-sm text-blue-800">
-            <strong>Workflow:</strong> Claim a ticket → Open in Gmail → Reply from{' '}
-            <code className="bg-blue-100 px-1 rounded">theportalsupport@icelandeclipse.com</code> →
-            {' '}Click <strong>Responded</strong> or wait for auto-sync.
-          </p>
-          <p className="text-sm text-blue-700">
-            <strong>Status tracking:</strong> When you mark a ticket as responded, it moves to &quot;Awaiting Reply&quot;.
-            If the customer responds again, it automatically pops back to &quot;Needs Response&quot;.
-          </p>
-        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { 
@@ -13,6 +14,7 @@ import {
   Mail 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { UserMenu } from './UserMenu';
 
 const navigation = [
   { name: 'Overview', href: '/', icon: LayoutDashboard },
@@ -25,7 +27,12 @@ const navigation = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { status } = useSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  if (status !== 'authenticated' || pathname?.startsWith('/auth')) {
+    return null;
+  }
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -70,20 +77,23 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-zinc-800 p-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start text-zinc-400 hover:text-zinc-100"
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-        >
-          <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
-          {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
-        </Button>
-        <p className="mt-2 text-xs text-zinc-600">
-          Cached for 60s • Click to force refresh
-        </p>
+      <div className="border-t border-zinc-800 py-4">
+        <UserMenu variant="sidebar" />
+        <div className="px-4 mt-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-zinc-400 hover:text-zinc-100"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+          </Button>
+          <p className="mt-2 text-xs text-zinc-600">
+            Cached for 60s • Click to force refresh
+          </p>
+        </div>
       </div>
     </div>
   );

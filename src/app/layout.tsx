@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { MobileNav } from '@/components/layout/MobileNav';
+import { AuthProvider } from '@/components/providers/AuthProvider';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -34,14 +35,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <MobileNav />
-          {/* Main content: full width on mobile, offset by sidebar on desktop */}
-          <main className="flex-1 md:ml-64 bg-zinc-50 pt-14 pb-16 md:pt-0 md:pb-0">
-            {children}
-          </main>
-        </div>
+        <AuthProvider>
+          <div className="flex min-h-screen">
+            <Sidebar />
+            <MobileNav />
+            <main className="flex-1 md:ml-64 bg-zinc-50 pt-14 pb-16 md:pt-0 md:pb-0">
+              {children}
+            </main>
+          </div>
+        </AuthProvider>
       </body>
     </html>
   );

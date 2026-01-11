@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase, generateTicketKey } from '@/lib/supabase';
+import { logActivity } from '@/lib/activity';
 
 export const dynamic = 'force-dynamic';
 import {
@@ -154,12 +155,35 @@ export async function POST() {
           }
           
           const ticketKey = generateTicketKey(message.threadId, customerEmail);
-          
-          const { data: existingTicket } = await supabase
+
+          // Check for direct ticket match
+          let { data: existingTicket } = await supabase
             .from('email_tickets')
             .select('*')
             .eq('ticket_key', ticketKey)
             .single();
+
+          // If not found, check thread_ticket_mapping for linked threads
+          if (!existingTicket) {
+            const { data: mapping } = await supabase
+              .from('thread_ticket_mapping')
+              .select('ticket_key')
+              .eq('gmail_thread_id', message.threadId)
+              .single();
+
+            if (mapping) {
+              const { data: mappedTicket } = await supabase
+                .from('email_tickets')
+                .select('*')
+                .eq('ticket_key', mapping.ticket_key)
+                .single();
+
+              if (mappedTicket) {
+                existingTicket = mappedTicket;
+                console.log(`[Sync] Thread ${message.threadId} mapped to ticket ${mapping.ticket_key}`);
+              }
+            }
+          }
 
           if (existingTicket) {
             // Update existing ticket - generate new summary if we don't have one
@@ -194,9 +218,12 @@ export async function POST() {
                 response_count: newResponseCount,
                 ...(summary && !existingTicket.summary ? { summary } : {}),
               })
-              .eq('ticket_key', ticketKey);
+              .eq('ticket_key', existingTicket.ticket_key);
 
-            if (!updateError) stats.ticketsUpdated++;
+            if (!updateError) {
+              stats.ticketsUpdated++;
+              await logActivity(existingTicket.ticket_key, 'customer_replied', customerEmail);
+            }
           } else {
             // Create new ticket with AI summary
             let summary: string | null = null;
@@ -221,7 +248,10 @@ export async function POST() {
                 summary,
               });
 
-            if (!createError) stats.ticketsCreated++;
+            if (!createError) {
+              stats.ticketsCreated++;
+              await logActivity(ticketKey, 'created', customerEmail, { subject });
+            }
           }
         } else {
           // Outbound: update all matching tickets for recipients
@@ -230,11 +260,22 @@ export async function POST() {
             if (recipientEmail.toLowerCase() === SUPPORT_EMAIL.toLowerCase()) continue;
 
             const ticketKey = generateTicketKey(message.threadId, recipientEmail);
-            
+
+            // Fetch current ticket to get claimed_by before we clear it
+            const { data: currentTicket } = await supabase
+              .from('email_tickets')
+              .select('claimed_by, responded_by')
+              .eq('ticket_key', ticketKey)
+              .single();
+
+            const responder = currentTicket?.claimed_by || currentTicket?.responded_by || 'team';
+
             const { error: updateError } = await supabase
               .from('email_tickets')
-              .update({ 
+              .update({
                 last_outbound_ts: internalTs,
+                responded_by: responder !== 'team' ? responder : null,
+                responded_at: internalTs,
                 // Team responded - now awaiting customer
                 status: 'awaiting_customer',
                 // Clear claim since it's handled
@@ -243,7 +284,13 @@ export async function POST() {
               })
               .eq('ticket_key', ticketKey);
 
-            if (!updateError) stats.ticketsUpdated++;
+            if (!updateError) {
+              stats.ticketsUpdated++;
+              await logActivity(ticketKey, 'responded', responder, {
+                detected_from: 'gmail_sync',
+                message_ts: internalTs
+              });
+            }
           }
         }
       } catch (msgError) {

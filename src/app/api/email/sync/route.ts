@@ -79,6 +79,7 @@ export async function POST() {
         const toHeader = getHeader(message, 'To');
         const ccHeader = getHeader(message, 'Cc');
         const subject = getHeader(message, 'Subject');
+        const messageIdHeader = getHeader(message, 'Message-ID');
         
         const fromEmail = parseEmailAddress(fromHeader);
         if (!fromEmail) {
@@ -108,6 +109,7 @@ export async function POST() {
             internal_ts: internalTs,
             direction,
             is_noise: isNoise,
+            message_id: messageIdHeader,
           });
 
         if (insertError) {
@@ -180,6 +182,13 @@ export async function POST() {
 
               if (mappedTicket) {
                 existingTicket = mappedTicket;
+                // Update ticket's thread ID to current thread for reply routing
+                if (mappedTicket.gmail_thread_id !== message.threadId) {
+                  await supabase
+                    .from('email_tickets')
+                    .update({ gmail_thread_id: message.threadId })
+                    .eq('ticket_key', mapping.ticket_key);
+                }
                 console.log(`[Sync] Thread ${message.threadId} mapped to ticket ${mapping.ticket_key}`);
               }
             }
@@ -199,11 +208,15 @@ export async function POST() {
 
             if (awaitingTicket) {
               existingTicket = awaitingTicket;
-              // Create mapping so future messages on this thread route correctly
+              // Create mapping and update ticket's thread ID to current thread
               await supabase.from('thread_ticket_mapping').upsert(
                 { gmail_thread_id: message.threadId, ticket_key: awaitingTicket.ticket_key },
                 { onConflict: 'gmail_thread_id' }
               );
+              await supabase
+                .from('email_tickets')
+                .update({ gmail_thread_id: message.threadId })
+                .eq('ticket_key', awaitingTicket.ticket_key);
               console.log(`[Sync] Fallback: linked thread ${message.threadId} to awaiting ticket ${awaitingTicket.ticket_key}`);
             }
           }

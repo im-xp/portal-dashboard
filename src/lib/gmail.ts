@@ -105,7 +105,7 @@ export async function getMessage(messageId: string): Promise<GmailMessage> {
   const token = await getAccessToken();
 
   const response = await fetch(
-    `${GMAIL_API_BASE}/users/me/messages/${messageId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject`,
+    `${GMAIL_API_BASE}/users/me/messages/${messageId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID`,
     {
       headers: { Authorization: `Bearer ${token}` },
     }

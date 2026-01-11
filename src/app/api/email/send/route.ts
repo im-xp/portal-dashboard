@@ -63,11 +63,17 @@ async function refreshUserToken(
   };
 }
 
+interface EmailHeaders {
+  inReplyTo?: string;
+  references?: string;
+}
+
 function buildRFC2822Email(
   from: string,
   to: string,
   subject: string,
-  body: string
+  body: string,
+  threadingHeaders?: EmailHeaders
 ): string {
   const date = new Date().toUTCString();
   const messageId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@icelandeclipse.com>`;
@@ -81,9 +87,16 @@ function buildRFC2822Email(
     `MIME-Version: 1.0`,
     `Content-Type: text/plain; charset="UTF-8"`,
     `Content-Transfer-Encoding: 7bit`,
-  ].join('\r\n');
+  ];
 
-  return `${headers}\r\n\r\n${body}`;
+  if (threadingHeaders?.inReplyTo) {
+    headers.push(`In-Reply-To: ${threadingHeaders.inReplyTo}`);
+  }
+  if (threadingHeaders?.references) {
+    headers.push(`References: ${threadingHeaders.references}`);
+  }
+
+  return `${headers.join('\r\n')}\r\n\r\n${body}`;
 }
 
 function encodeBase64Url(str: string): string {
@@ -152,15 +165,39 @@ export async function POST(request: NextRequest) {
     }
 
     const subjectChanged = subject.trim().toLowerCase() !== original_subject.trim().toLowerCase();
-    const rawEmail = buildRFC2822Email(SUPPORT_EMAIL, to_email, subject, emailBody);
+
+    // Fetch last message for this ticket to get its Message-ID for proper threading
+    let threadingHeaders: EmailHeaders | undefined;
+    if (!subjectChanged && thread_id) {
+      const { data: lastMessage } = await supabase
+        .from('email_messages')
+        .select('message_id')
+        .eq('gmail_thread_id', thread_id)
+        .order('internal_ts', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (lastMessage?.message_id) {
+        threadingHeaders = {
+          inReplyTo: lastMessage.message_id,
+          references: lastMessage.message_id,
+        };
+        console.log('[Send API] Using threading headers:', threadingHeaders);
+      }
+    }
+
+    const rawEmail = buildRFC2822Email(SUPPORT_EMAIL, to_email, subject, emailBody, threadingHeaders);
     const encodedEmail = encodeBase64Url(rawEmail);
 
-    const gmailPayload: { raw: string; threadId?: string } = { raw: encodedEmail };
-    if (!subjectChanged && thread_id) {
+    // Try with threadId first (for proper threading), fallback to no threadId if 404
+    const useThreadId = !subjectChanged && thread_id;
+    let usedThreadIdSuccessfully = false;
+    let gmailPayload: { raw: string; threadId?: string } = { raw: encodedEmail };
+    if (useThreadId) {
       gmailPayload.threadId = thread_id;
     }
 
-    const gmailResponse = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
+    let gmailResponse = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -168,6 +205,26 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify(gmailPayload),
     });
+
+    // If 404 with threadId, retry without it (thread may not exist in user's delegated access)
+    // The In-Reply-To and References headers will still maintain threading for the recipient
+    if (!gmailResponse.ok && useThreadId) {
+      const errorText = await gmailResponse.text();
+      if (errorText.includes('404') || errorText.includes('notFound')) {
+        console.log('[Send API] ThreadId not found, retrying without threadId (threading headers will maintain conversation)');
+        gmailPayload = { raw: encodedEmail };
+        gmailResponse = await fetch(`${GMAIL_API_BASE}/users/me/messages/send`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(gmailPayload),
+        });
+      }
+    } else if (gmailResponse.ok && useThreadId) {
+      usedThreadIdSuccessfully = true;
+    }
 
     if (!gmailResponse.ok) {
       const errorText = await gmailResponse.text();
@@ -190,7 +247,9 @@ export async function POST(request: NextRequest) {
 
     const gmailResult: GmailSendResponse = await gmailResponse.json();
 
-    if (subjectChanged && gmailResult.threadId !== thread_id) {
+    // Only update thread mappings if we successfully used the original threadId
+    // Otherwise we'd corrupt the ticket by pointing to a new thread that doesn't exist in the support inbox
+    if (usedThreadIdSuccessfully) {
       await supabase.from('thread_ticket_mapping').upsert(
         {
           gmail_thread_id: gmailResult.threadId,
@@ -198,6 +257,12 @@ export async function POST(request: NextRequest) {
         },
         { onConflict: 'gmail_thread_id' }
       );
+      await supabase
+        .from('email_tickets')
+        .update({ gmail_thread_id: gmailResult.threadId })
+        .eq('ticket_key', ticket_key);
+    } else {
+      console.log('[Send API] Sent without threadId - not updating ticket thread mapping to avoid corruption');
     }
 
     const now = new Date().toISOString();

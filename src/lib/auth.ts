@@ -26,6 +26,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (!user.email || !isAllowedDomain(user.email)) {
+        console.log('[Auth] Rejected sign-in for:', user.email);
         return false;
       }
 
@@ -34,7 +35,13 @@ export const authOptions: NextAuthOptions = {
           ? new Date(account.expires_at * 1000).toISOString()
           : null;
 
-        await supabase.from('users').upsert(
+        console.log('[Auth] Saving tokens for:', user.email, {
+          hasAccessToken: !!account.access_token,
+          hasRefreshToken: !!account.refresh_token,
+          expiresAt,
+        });
+
+        const { error } = await supabase.from('users').upsert(
           {
             email: user.email,
             name: user.name,
@@ -46,6 +53,17 @@ export const authOptions: NextAuthOptions = {
           },
           { onConflict: 'email' }
         );
+
+        if (error) {
+          console.error('[Auth] Failed to save user tokens:', error);
+        } else {
+          console.log('[Auth] Successfully saved tokens for:', user.email);
+        }
+      } else {
+        console.warn('[Auth] Missing account or supabase client', {
+          hasAccount: !!account,
+          hasSupabase: !!supabase
+        });
       }
 
       return true;

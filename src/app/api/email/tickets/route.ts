@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('email_tickets')
       .select('*')
-      .order('last_inbound_ts', { ascending: true })
+      .order('last_inbound_ts', { ascending: false })
       .limit(limit);
 
     // Apply filter

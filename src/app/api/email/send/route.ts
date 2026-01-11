@@ -7,6 +7,7 @@ import { logActivity } from '@/lib/activity';
 export const dynamic = 'force-dynamic';
 
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1';
+const SUPPORT_EMAIL = process.env.GMAIL_SUPPORT_ADDRESS || 'theportalsupport@icelandeclipse.com';
 
 interface SendRequest {
   ticket_key: string;
@@ -68,7 +69,6 @@ function buildRFC2822Email(
   subject: string,
   body: string
 ): string {
-  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const date = new Date().toUTCString();
   const messageId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@icelandeclipse.com>`;
 
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
     }
 
     const subjectChanged = subject.trim().toLowerCase() !== original_subject.trim().toLowerCase();
-    const rawEmail = buildRFC2822Email(userEmail, to_email, subject, emailBody);
+    const rawEmail = buildRFC2822Email(SUPPORT_EMAIL, to_email, subject, emailBody);
     const encodedEmail = encodeBase64Url(rawEmail);
 
     const gmailPayload: { raw: string; threadId?: string } = { raw: encodedEmail };
@@ -172,6 +172,16 @@ export async function POST(request: NextRequest) {
     if (!gmailResponse.ok) {
       const errorText = await gmailResponse.text();
       console.error('[Send API] Gmail error:', errorText);
+
+      if (errorText.includes('Mail service not enabled') ||
+          errorText.includes('Invalid from header') ||
+          errorText.includes('not authorized')) {
+        return NextResponse.json(
+          { error: `Send As not configured. Please add ${SUPPORT_EMAIL} in your Gmail Settings → Accounts → "Send mail as".` },
+          { status: 403 }
+        );
+      }
+
       return NextResponse.json(
         { error: `Failed to send email: ${errorText}` },
         { status: 500 }
@@ -195,7 +205,7 @@ export async function POST(request: NextRequest) {
     await supabase.from('email_messages').insert({
       gmail_message_id: gmailResult.id,
       gmail_thread_id: gmailResult.threadId,
-      from_email: userEmail,
+      from_email: SUPPORT_EMAIL,
       to_emails: [to_email],
       cc_emails: [],
       subject: subject,

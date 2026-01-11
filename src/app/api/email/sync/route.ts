@@ -185,6 +185,29 @@ export async function POST() {
             }
           }
 
+          // Fallback: check for recent awaiting_customer ticket for this customer
+          // This handles cases where Gmail assigns different thread IDs to our outbound and their reply
+          if (!existingTicket) {
+            const { data: awaitingTicket } = await supabase
+              .from('email_tickets')
+              .select('*')
+              .eq('customer_email', customerEmail)
+              .eq('status', 'awaiting_customer')
+              .order('last_outbound_ts', { ascending: false })
+              .limit(1)
+              .single();
+
+            if (awaitingTicket) {
+              existingTicket = awaitingTicket;
+              // Create mapping so future messages on this thread route correctly
+              await supabase.from('thread_ticket_mapping').upsert(
+                { gmail_thread_id: message.threadId, ticket_key: awaitingTicket.ticket_key },
+                { onConflict: 'gmail_thread_id' }
+              );
+              console.log(`[Sync] Fallback: linked thread ${message.threadId} to awaiting ticket ${awaitingTicket.ticket_key}`);
+            }
+          }
+
           if (existingTicket) {
             // Update existing ticket - generate new summary if we don't have one
             let summary = existingTicket.summary;
@@ -254,42 +277,58 @@ export async function POST() {
             }
           }
         } else {
-          // Outbound: update all matching tickets for recipients
+          // Outbound: update matching tickets for recipients
           for (const recipientEmail of [...toEmails, ...ccEmails]) {
-            // Skip if recipient is support email
             if (recipientEmail.toLowerCase() === SUPPORT_EMAIL.toLowerCase()) continue;
 
             const ticketKey = generateTicketKey(message.threadId, recipientEmail);
 
-            // Fetch current ticket to get claimed_by before we clear it
             const { data: currentTicket } = await supabase
               .from('email_tickets')
-              .select('claimed_by, responded_by')
+              .select('claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
               .eq('ticket_key', ticketKey)
               .single();
 
-            const responder = currentTicket?.claimed_by || currentTicket?.responded_by || 'team';
+            if (!currentTicket) continue;
 
-            const { error: updateError } = await supabase
-              .from('email_tickets')
-              .update({
-                last_outbound_ts: internalTs,
-                responded_by: responder !== 'team' ? responder : null,
-                responded_at: internalTs,
-                // Team responded - now awaiting customer
-                status: 'awaiting_customer',
-                // Clear claim since it's handled
-                claimed_by: null,
-                claimed_at: null,
-              })
-              .eq('ticket_key', ticketKey);
+            const outboundTs = new Date(internalTs);
+            const lastInboundTs = currentTicket.last_inbound_ts ? new Date(currentTicket.last_inbound_ts) : null;
+            const lastOutboundTs = currentTicket.last_outbound_ts ? new Date(currentTicket.last_outbound_ts) : null;
 
-            if (!updateError) {
-              stats.ticketsUpdated++;
-              await logActivity(ticketKey, 'responded', responder, {
-                detected_from: 'gmail_sync',
-                message_ts: internalTs
-              });
+            // Only treat as "response" if this outbound is AFTER the customer's message
+            const isResponseToCustomer = lastInboundTs && outboundTs > lastInboundTs;
+
+            // Skip if this outbound is older than what we've already recorded
+            if (lastOutboundTs && outboundTs <= lastOutboundTs) continue;
+
+            if (isResponseToCustomer) {
+              const responder = currentTicket.claimed_by || currentTicket.responded_by || 'team';
+
+              const { error: updateError } = await supabase
+                .from('email_tickets')
+                .update({
+                  last_outbound_ts: internalTs,
+                  responded_by: responder !== 'team' ? responder : null,
+                  responded_at: internalTs,
+                  status: 'awaiting_customer',
+                  claimed_by: null,
+                  claimed_at: null,
+                })
+                .eq('ticket_key', ticketKey);
+
+              if (!updateError) {
+                stats.ticketsUpdated++;
+                await logActivity(ticketKey, 'responded', responder, {
+                  detected_from: 'gmail_sync',
+                  message_ts: internalTs
+                });
+              }
+            } else {
+              // Initiating outbound - just track the timestamp, don't change status
+              await supabase
+                .from('email_tickets')
+                .update({ last_outbound_ts: internalTs })
+                .eq('ticket_key', ticketKey);
             }
           }
         }

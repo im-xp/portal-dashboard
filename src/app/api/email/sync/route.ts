@@ -5,7 +5,6 @@ import { logActivity } from '@/lib/activity';
 export const dynamic = 'force-dynamic';
 import {
   listMessages,
-  getMessage,
   getMessageFull,
   getHeader,
   parseEmailAddress,
@@ -52,26 +51,25 @@ export async function POST() {
     // List messages
     const listResponse = await listMessages(query, 500);
     const messageRefs = listResponse.messages || [];
-    
+
     console.log(`[Gmail Sync] Found ${messageRefs.length} messages`);
 
-    // Process each message
-    for (const ref of messageRefs) {
+    // Batch deduplication - one query instead of N sequential checks
+    const allIds = messageRefs.map(r => r.id);
+    const { data: existingMessages } = await supabase
+      .from('email_messages')
+      .select('gmail_message_id')
+      .in('gmail_message_id', allIds);
+    const existingSet = new Set(existingMessages?.map(e => e.gmail_message_id) || []);
+
+    const newMessageRefs = messageRefs.filter(r => !existingSet.has(r.id));
+    console.log(`[Gmail Sync] ${newMessageRefs.length} new messages to process`);
+
+    // Process only new messages
+    for (const ref of newMessageRefs) {
       try {
-        // Check if we already have this message
-        const { data: existing } = await supabase
-          .from('email_messages')
-          .select('gmail_message_id')
-          .eq('gmail_message_id', ref.id)
-          .single();
-
-        if (existing) {
-          // Already processed
-          continue;
-        }
-
-        // Fetch full message
-        const message = await getMessage(ref.id);
+        // Fetch full message including body
+        const message = await getMessageFull(ref.id);
         stats.messagesProcessed++;
 
         // Extract headers
@@ -95,7 +93,7 @@ export async function POST() {
           ? new Date(parseInt(message.internalDate)).toISOString()
           : new Date().toISOString();
 
-        // Insert message
+        // Insert message with body
         const { error: insertError } = await supabase
           .from('email_messages')
           .insert({
@@ -106,6 +104,7 @@ export async function POST() {
             cc_emails: ccEmails,
             subject,
             snippet: message.snippet,
+            body: message.body,
             internal_ts: internalTs,
             direction,
             is_noise: isNoise,
@@ -131,23 +130,19 @@ export async function POST() {
           if (isInternalSender(fromEmail)) {
             // Check if this is a forwarded email
             if (isForwardedEmail(subject || '')) {
-              // Try to extract original sender from email body
-              try {
-                const fullMessage = await getMessageFull(message.id);
-                if (fullMessage.body) {
-                  const originalSender = extractForwardedSender(fullMessage.body);
-                  if (originalSender) {
-                    customerEmail = originalSender;
-                    isForward = true;
-                    console.log(`[Sync] Forwarded email detected: ${fromEmail} -> original sender: ${customerEmail}`);
-                  } else {
-                    // Couldn't extract original sender, skip this message
-                    console.log(`[Sync] Skipping internal forward - couldn't extract original sender: ${subject}`);
-                    continue;
-                  }
+              // Extract original sender from email body (already fetched)
+              if (message.body) {
+                const originalSender = extractForwardedSender(message.body);
+                if (originalSender) {
+                  customerEmail = originalSender;
+                  isForward = true;
+                  console.log(`[Sync] Forwarded email detected: ${fromEmail} -> original sender: ${customerEmail}`);
+                } else {
+                  console.log(`[Sync] Skipping internal forward - couldn't extract original sender: ${subject}`);
+                  continue;
                 }
-              } catch (e) {
-                console.warn('[Sync] Failed to process forward:', e);
+              } else {
+                console.log(`[Sync] Skipping internal forward - no body: ${subject}`);
                 continue;
               }
             } else {
@@ -224,13 +219,9 @@ export async function POST() {
           if (existingTicket) {
             // Update existing ticket - generate new summary if we don't have one
             let summary = existingTicket.summary;
-            if (!summary) {
+            if (!summary && message.body) {
               try {
-                const fullMessage = await getMessageFull(message.id);
-                if (fullMessage.body) {
-                  // Pass customer email for context to ensure correct attribution
-                  summary = await summarizeEmail(fullMessage.body, subject || '', customerEmail);
-                }
+                summary = await summarizeEmail(message.body, subject || '', customerEmail);
               } catch (e) {
                 console.warn('[Sync] Failed to generate summary:', e);
               }
@@ -263,14 +254,12 @@ export async function POST() {
           } else {
             // Create new ticket with AI summary
             let summary: string | null = null;
-            try {
-              const fullMessage = await getMessageFull(message.id);
-              if (fullMessage.body) {
-                // Pass customer email for context to ensure correct attribution
-                summary = await summarizeEmail(fullMessage.body, subject || '', customerEmail);
+            if (message.body) {
+              try {
+                summary = await summarizeEmail(message.body, subject || '', customerEmail);
+              } catch (e) {
+                console.warn('[Sync] Failed to generate summary:', e);
               }
-            } catch (e) {
-              console.warn('[Sync] Failed to generate summary:', e);
             }
 
             const { error: createError } = await supabase

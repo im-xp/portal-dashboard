@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { TicketNotes } from '@/components/email/TicketNotes';
 import { TicketActivity } from '@/components/email/TicketActivity';
 import { ComposeResponse } from '@/components/email/ComposeResponse';
+import { ThreadMessages } from '@/components/email/ThreadMessages';
 
 interface EmailTicket {
   ticket_key: string;
@@ -447,11 +448,14 @@ export default function EmailQueuePage() {
                           </p>
                         )}
 
-                        {/* Notes and Activity - shown when expanded */}
+                        {/* Conversation, Notes and Activity - shown when expanded */}
                         {isExpanded && (
-                          <div className="mt-4 pt-4 border-t border-zinc-200 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <TicketNotes ticketKey={ticket.ticket_key} currentUser={currentUser} />
-                            <TicketActivity ticketKey={ticket.ticket_key} />
+                          <div className="mt-4 pt-4 border-t border-zinc-200 space-y-4">
+                            <ThreadMessages ticketKey={ticket.ticket_key} />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-zinc-100">
+                              <TicketNotes ticketKey={ticket.ticket_key} currentUser={currentUser} />
+                              <TicketActivity ticketKey={ticket.ticket_key} />
+                            </div>
                           </div>
                         )}
 

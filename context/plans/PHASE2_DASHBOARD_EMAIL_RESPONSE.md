@@ -78,11 +78,11 @@ This is an email queue dashboard for managing customer support. The system syncs
 - `ticket_notes` - Internal team notes (from Phase 1)
 - `ticket_activity` - Audit log (from Phase 1, not fully wired)
 
-**Missing from current system:**
-- No `Message-ID`, `In-Reply-To`, `References` headers stored
-- No users table
-- No real authentication
-- No send capability
+**Missing from current system:** (All resolved in Phase 2)
+- ~~No `Message-ID`, `In-Reply-To`, `References` headers stored~~ → Fixed in 008_message_id_header.sql
+- ~~No users table~~ → Added in 006_users.sql
+- ~~No real authentication~~ → NextAuth with Google OAuth
+- ~~No send capability~~ → Send endpoint with proper threading headers
 
 ---
 
@@ -223,6 +223,7 @@ CREATE INDEX idx_thread_mapping_ticket ON thread_ticket_mapping(ticket_key);
 | Create | `src/app/api/email/send/route.ts` |
 | Create | `supabase/migrations/006_users.sql` |
 | Create | `supabase/migrations/007_thread_mapping.sql` |
+| Create | `supabase/migrations/008_message_id_header.sql` |
 | Modify | `src/app/email-queue/page.tsx` |
 | Modify | `src/app/api/email/sync/route.ts` |
 | Modify | `src/app/api/email/claim/route.ts` |
@@ -263,6 +264,7 @@ NEXTAUTH_URL=https://your-domain.vercel.app
 
 ## Future Work (Parking Lot)
 
+- [ ] **Embed full conversation in dashboard** - Display all messages in the thread so responders have full context without opening Gmail
 - [ ] Rich text editor (bold, links, etc.)
 - [ ] File attachments
 - [ ] Email templates / canned responses

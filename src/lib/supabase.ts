@@ -36,6 +36,7 @@ export interface EmailTicket {
   claimed_at: string | null;
   created_at: string;
   updated_at: string;
+  is_mass_email_thread?: boolean;
 }
 
 export interface EmailSyncState {

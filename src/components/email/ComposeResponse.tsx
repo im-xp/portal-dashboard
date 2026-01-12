@@ -10,6 +10,7 @@ interface ComposeResponseProps {
   customerEmail: string;
   originalSubject: string;
   threadId: string;
+  isMassEmailThread?: boolean;
   onSent?: () => void;
   onCancel?: () => void;
 }
@@ -19,6 +20,7 @@ export function ComposeResponse({
   customerEmail,
   originalSubject,
   threadId,
+  isMassEmailThread = false,
   onSent,
   onCancel,
 }: ComposeResponseProps) {
@@ -27,6 +29,7 @@ export function ComposeResponse({
     : `Re: ${originalSubject}`;
 
   const [subject, setSubject] = useState(replySubject);
+  const [ccEmails, setCcEmails] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +50,7 @@ export function ComposeResponse({
         body: JSON.stringify({
           ticket_key: ticketKey,
           to_email: customerEmail,
+          cc_emails: ccEmails.trim() || undefined,
           subject: subject.trim(),
           body: body.trim(),
           original_subject: replySubject,
@@ -61,6 +65,7 @@ export function ComposeResponse({
       }
 
       setBody('');
+      setCcEmails('');
       setSubject(replySubject);
       onSent?.();
     } catch (err) {
@@ -86,6 +91,17 @@ export function ComposeResponse({
       </div>
 
       <div className="space-y-1">
+        <label className="text-sm font-medium text-zinc-700">CC</label>
+        <input
+          type="text"
+          value={ccEmails}
+          onChange={(e) => setCcEmails(e.target.value)}
+          placeholder="teammate@im-xp.com"
+          className="w-full text-sm border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div className="space-y-1">
         <label className="text-sm font-medium text-zinc-700">Subject</label>
         <input
           type="text"
@@ -98,6 +114,12 @@ export function ComposeResponse({
               : 'focus:ring-blue-500'
           )}
         />
+        {isMassEmailThread && !subjectChanged && (
+          <div className="flex items-center gap-1.5 text-xs text-red-600 mt-1 font-medium">
+            <AlertTriangle className="h-3 w-3" />
+            Mass email reply - you must change the subject to create a new thread
+          </div>
+        )}
         {subjectChanged && (
           <div className="flex items-center gap-1.5 text-xs text-amber-600 mt-1">
             <AlertTriangle className="h-3 w-3" />
@@ -126,7 +148,7 @@ export function ComposeResponse({
       <div className="flex items-center justify-end gap-2">
         <Button
           onClick={handleSend}
-          disabled={!body.trim() || sending}
+          disabled={!body.trim() || sending || (isMassEmailThread && !subjectChanged)}
           className="gap-2"
         >
           {sending ? (

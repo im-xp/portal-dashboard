@@ -12,6 +12,7 @@ const SUPPORT_EMAIL = process.env.GMAIL_SUPPORT_ADDRESS || 'theportalsupport@ice
 interface SendRequest {
   ticket_key: string;
   to_email: string;
+  cc_emails?: string;
   subject: string;
   body: string;
   original_subject: string;
@@ -71,6 +72,7 @@ interface EmailHeaders {
 function buildRFC2822Email(
   from: string,
   to: string,
+  cc: string | undefined,
   subject: string,
   body: string,
   threadingHeaders?: EmailHeaders
@@ -81,13 +83,20 @@ function buildRFC2822Email(
   const headers = [
     `From: ${from}`,
     `To: ${to}`,
+  ];
+
+  if (cc) {
+    headers.push(`Cc: ${cc}`);
+  }
+
+  headers.push(
     `Subject: ${subject}`,
     `Date: ${date}`,
     `Message-ID: ${messageId}`,
     `MIME-Version: 1.0`,
     `Content-Type: text/plain; charset="UTF-8"`,
     `Content-Transfer-Encoding: 7bit`,
-  ];
+  );
 
   if (threadingHeaders?.inReplyTo) {
     headers.push(`In-Reply-To: ${threadingHeaders.inReplyTo}`);
@@ -116,8 +125,8 @@ export async function POST(request: NextRequest) {
     }
 
     const userEmail = session.user.email;
-    const body: SendRequest = await request.json();
-    const { ticket_key, to_email, subject, body: emailBody, original_subject, thread_id } = body;
+    const reqBody: SendRequest = await request.json();
+    const { ticket_key, to_email, cc_emails, subject, body: emailBody, original_subject, thread_id } = reqBody;
 
     if (!ticket_key || !to_email || !subject || !emailBody) {
       return NextResponse.json(
@@ -186,7 +195,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const rawEmail = buildRFC2822Email(SUPPORT_EMAIL, to_email, subject, emailBody, threadingHeaders);
+    const rawEmail = buildRFC2822Email(SUPPORT_EMAIL, to_email, cc_emails, subject, emailBody, threadingHeaders);
     const encodedEmail = encodeBase64Url(rawEmail);
 
     // Try with threadId first (for proper threading), fallback to no threadId if 404
@@ -272,7 +281,7 @@ export async function POST(request: NextRequest) {
       gmail_thread_id: gmailResult.threadId,
       from_email: SUPPORT_EMAIL,
       to_emails: [to_email],
-      cc_emails: [],
+      cc_emails: cc_emails ? cc_emails.split(',').map(e => e.trim()).filter(Boolean) : [],
       subject: subject,
       snippet: emailBody.slice(0, 200),
       internal_ts: now,

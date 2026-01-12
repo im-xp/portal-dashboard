@@ -49,6 +49,7 @@ interface EmailTicket {
   age_hours: number | null;
   age_display: string;
   is_stale: boolean;
+  is_mass_email_thread: boolean;
 }
 
 interface SyncStatus {
@@ -585,6 +586,7 @@ export default function EmailQueuePage() {
                           customerEmail={ticket.customer_email}
                           originalSubject={ticket.subject || ''}
                           threadId={ticket.gmail_thread_id}
+                          isMassEmailThread={ticket.is_mass_email_thread}
                           onSent={() => {
                             setReplyingTo(null);
                             fetchTickets();

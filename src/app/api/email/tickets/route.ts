@@ -49,6 +49,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Detect mass email threads by checking if thread has outbound from marketing sender
+    const MASS_EMAIL_SENDERS = ['hallo@icelandeclipse.com'];
+    const threadIds = [...new Set((tickets as EmailTicket[]).map(t => t.gmail_thread_id))];
+
+    const { data: massEmailMessages } = await supabase
+      .from('email_messages')
+      .select('gmail_thread_id, from_email')
+      .in('gmail_thread_id', threadIds)
+      .eq('direction', 'outbound')
+      .in('from_email', MASS_EMAIL_SENDERS);
+
+    const massEmailThreads = new Set(massEmailMessages?.map(m => m.gmail_thread_id) || []);
+
     // Add computed fields for UI
     const now = new Date();
     const enrichedTickets = (tickets as EmailTicket[]).map(ticket => {
@@ -71,6 +84,7 @@ export async function GET(request: NextRequest) {
         age_hours: ageHours,
         age_display: formatAge(ageHours),
         is_stale: isStale,
+        is_mass_email_thread: massEmailThreads.has(ticket.gmail_thread_id),
       };
     });
 

@@ -105,7 +105,7 @@ export async function getMessage(messageId: string): Promise<GmailMessage> {
   const token = await getAccessToken();
 
   const response = await fetch(
-    `${GMAIL_API_BASE}/users/me/messages/${messageId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject`,
+    `${GMAIL_API_BASE}/users/me/messages/${messageId}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Message-ID`,
     {
       headers: { Authorization: `Bearer ${token}` },
     }
@@ -172,8 +172,9 @@ function extractBody(payload: GmailMessage['payload'] & { body?: { data?: string
     for (const part of payload.parts) {
       if (part.mimeType === 'text/html' && part.body?.data) {
         const html = decodeBase64Url(part.body.data);
-        // Strip HTML tags for plain text
-        return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        // Strip HTML tags and decode entities for plain text
+        const stripped = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        return decodeHtmlEntities(stripped);
       }
     }
   }
@@ -192,6 +193,21 @@ function decodeBase64Url(data: string): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Decode HTML entities (&#39; -> ', &amp; -> &, etc.)
+ */
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&'); // Must be last
 }
 
 /**
@@ -244,7 +260,8 @@ const INTERNAL_SENDERS = [
 ];
 
 const INTERNAL_DOMAINS = [
-  'im-xp.com', // Internal team domain
+  'im-xp.com',
+  'icelandeclipse.com',
 ];
 
 /**
@@ -336,8 +353,7 @@ export function isNoiseMessage(message: GmailMessage): boolean {
  * Determine message direction based on sender
  */
 export function getMessageDirection(fromEmail: string): 'inbound' | 'outbound' {
-  const supportEmail = SUPPORT_EMAIL.toLowerCase();
-  return fromEmail.toLowerCase() === supportEmail ? 'outbound' : 'inbound';
+  return isInternalSender(fromEmail) ? 'outbound' : 'inbound';
 }
 
 /**

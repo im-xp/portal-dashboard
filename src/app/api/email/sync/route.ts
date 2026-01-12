@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabase, generateTicketKey } from '@/lib/supabase';
+import { logActivity } from '@/lib/activity';
 
 export const dynamic = 'force-dynamic';
 import {
   listMessages,
-  getMessage,
   getMessageFull,
   getHeader,
   parseEmailAddress,
@@ -51,26 +51,25 @@ export async function POST() {
     // List messages
     const listResponse = await listMessages(query, 500);
     const messageRefs = listResponse.messages || [];
-    
+
     console.log(`[Gmail Sync] Found ${messageRefs.length} messages`);
 
-    // Process each message
-    for (const ref of messageRefs) {
+    // Batch deduplication - one query instead of N sequential checks
+    const allIds = messageRefs.map(r => r.id);
+    const { data: existingMessages } = await supabase
+      .from('email_messages')
+      .select('gmail_message_id')
+      .in('gmail_message_id', allIds);
+    const existingSet = new Set(existingMessages?.map(e => e.gmail_message_id) || []);
+
+    const newMessageRefs = messageRefs.filter(r => !existingSet.has(r.id));
+    console.log(`[Gmail Sync] ${newMessageRefs.length} new messages to process`);
+
+    // Process only new messages
+    for (const ref of newMessageRefs) {
       try {
-        // Check if we already have this message
-        const { data: existing } = await supabase
-          .from('email_messages')
-          .select('gmail_message_id')
-          .eq('gmail_message_id', ref.id)
-          .single();
-
-        if (existing) {
-          // Already processed
-          continue;
-        }
-
-        // Fetch full message
-        const message = await getMessage(ref.id);
+        // Fetch full message including body
+        const message = await getMessageFull(ref.id);
         stats.messagesProcessed++;
 
         // Extract headers
@@ -78,6 +77,7 @@ export async function POST() {
         const toHeader = getHeader(message, 'To');
         const ccHeader = getHeader(message, 'Cc');
         const subject = getHeader(message, 'Subject');
+        const messageIdHeader = getHeader(message, 'Message-ID');
         
         const fromEmail = parseEmailAddress(fromHeader);
         if (!fromEmail) {
@@ -93,7 +93,7 @@ export async function POST() {
           ? new Date(parseInt(message.internalDate)).toISOString()
           : new Date().toISOString();
 
-        // Insert message
+        // Insert message with body
         const { error: insertError } = await supabase
           .from('email_messages')
           .insert({
@@ -104,9 +104,11 @@ export async function POST() {
             cc_emails: ccEmails,
             subject,
             snippet: message.snippet,
+            body: message.body,
             internal_ts: internalTs,
             direction,
             is_noise: isNoise,
+            message_id: messageIdHeader,
           });
 
         if (insertError) {
@@ -128,23 +130,19 @@ export async function POST() {
           if (isInternalSender(fromEmail)) {
             // Check if this is a forwarded email
             if (isForwardedEmail(subject || '')) {
-              // Try to extract original sender from email body
-              try {
-                const fullMessage = await getMessageFull(message.id);
-                if (fullMessage.body) {
-                  const originalSender = extractForwardedSender(fullMessage.body);
-                  if (originalSender) {
-                    customerEmail = originalSender;
-                    isForward = true;
-                    console.log(`[Sync] Forwarded email detected: ${fromEmail} -> original sender: ${customerEmail}`);
-                  } else {
-                    // Couldn't extract original sender, skip this message
-                    console.log(`[Sync] Skipping internal forward - couldn't extract original sender: ${subject}`);
-                    continue;
-                  }
+              // Extract original sender from email body (already fetched)
+              if (message.body) {
+                const originalSender = extractForwardedSender(message.body);
+                if (originalSender) {
+                  customerEmail = originalSender;
+                  isForward = true;
+                  console.log(`[Sync] Forwarded email detected: ${fromEmail} -> original sender: ${customerEmail}`);
+                } else {
+                  console.log(`[Sync] Skipping internal forward - couldn't extract original sender: ${subject}`);
+                  continue;
                 }
-              } catch (e) {
-                console.warn('[Sync] Failed to process forward:', e);
+              } else {
+                console.log(`[Sync] Skipping internal forward - no body: ${subject}`);
                 continue;
               }
             } else {
@@ -154,23 +152,76 @@ export async function POST() {
           }
           
           const ticketKey = generateTicketKey(message.threadId, customerEmail);
-          
-          const { data: existingTicket } = await supabase
+
+          // Check for direct ticket match
+          let { data: existingTicket } = await supabase
             .from('email_tickets')
             .select('*')
             .eq('ticket_key', ticketKey)
             .single();
 
+          // If not found, check thread_ticket_mapping for linked threads
+          if (!existingTicket) {
+            const { data: mapping } = await supabase
+              .from('thread_ticket_mapping')
+              .select('ticket_key')
+              .eq('gmail_thread_id', message.threadId)
+              .single();
+
+            if (mapping) {
+              const { data: mappedTicket } = await supabase
+                .from('email_tickets')
+                .select('*')
+                .eq('ticket_key', mapping.ticket_key)
+                .single();
+
+              if (mappedTicket) {
+                existingTicket = mappedTicket;
+                // Update ticket's thread ID to current thread for reply routing
+                if (mappedTicket.gmail_thread_id !== message.threadId) {
+                  await supabase
+                    .from('email_tickets')
+                    .update({ gmail_thread_id: message.threadId })
+                    .eq('ticket_key', mapping.ticket_key);
+                }
+                console.log(`[Sync] Thread ${message.threadId} mapped to ticket ${mapping.ticket_key}`);
+              }
+            }
+          }
+
+          // Fallback: check for recent awaiting_customer ticket for this customer
+          // This handles cases where Gmail assigns different thread IDs to our outbound and their reply
+          if (!existingTicket) {
+            const { data: awaitingTicket } = await supabase
+              .from('email_tickets')
+              .select('*')
+              .eq('customer_email', customerEmail)
+              .eq('status', 'awaiting_customer_response')
+              .order('last_outbound_ts', { ascending: false })
+              .limit(1)
+              .single();
+
+            if (awaitingTicket) {
+              existingTicket = awaitingTicket;
+              // Create mapping and update ticket's thread ID to current thread
+              await supabase.from('thread_ticket_mapping').upsert(
+                { gmail_thread_id: message.threadId, ticket_key: awaitingTicket.ticket_key },
+                { onConflict: 'gmail_thread_id' }
+              );
+              await supabase
+                .from('email_tickets')
+                .update({ gmail_thread_id: message.threadId })
+                .eq('ticket_key', awaitingTicket.ticket_key);
+              console.log(`[Sync] Fallback: linked thread ${message.threadId} to awaiting ticket ${awaitingTicket.ticket_key}`);
+            }
+          }
+
           if (existingTicket) {
             // Update existing ticket - generate new summary if we don't have one
             let summary = existingTicket.summary;
-            if (!summary) {
+            if (!summary && message.body) {
               try {
-                const fullMessage = await getMessageFull(message.id);
-                if (fullMessage.body) {
-                  // Pass customer email for context to ensure correct attribution
-                  summary = await summarizeEmail(fullMessage.body, subject || '', customerEmail);
-                }
+                summary = await summarizeEmail(message.body, subject || '', customerEmail);
               } catch (e) {
                 console.warn('[Sync] Failed to generate summary:', e);
               }
@@ -188,26 +239,27 @@ export async function POST() {
                 subject: isForward ? subject?.replace(/^Fwd:\s*/i, '') : subject,
                 last_inbound_ts: internalTs,
                 // Customer responded - set status back to awaiting_response
-                status: 'awaiting_response',
+                status: 'awaiting_team_response',
                 // Mark as follow-up if we had already responded
                 is_followup: isFollowup,
                 response_count: newResponseCount,
                 ...(summary && !existingTicket.summary ? { summary } : {}),
               })
-              .eq('ticket_key', ticketKey);
+              .eq('ticket_key', existingTicket.ticket_key);
 
-            if (!updateError) stats.ticketsUpdated++;
+            if (!updateError) {
+              stats.ticketsUpdated++;
+              await logActivity(existingTicket.ticket_key, 'customer_replied', customerEmail);
+            }
           } else {
             // Create new ticket with AI summary
             let summary: string | null = null;
-            try {
-              const fullMessage = await getMessageFull(message.id);
-              if (fullMessage.body) {
-                // Pass customer email for context to ensure correct attribution
-                summary = await summarizeEmail(fullMessage.body, subject || '', customerEmail);
+            if (message.body) {
+              try {
+                summary = await summarizeEmail(message.body, subject || '', customerEmail);
+              } catch (e) {
+                console.warn('[Sync] Failed to generate summary:', e);
               }
-            } catch (e) {
-              console.warn('[Sync] Failed to generate summary:', e);
             }
 
             const { error: createError } = await supabase
@@ -221,29 +273,65 @@ export async function POST() {
                 summary,
               });
 
-            if (!createError) stats.ticketsCreated++;
+            if (!createError) {
+              stats.ticketsCreated++;
+              await logActivity(ticketKey, 'created', customerEmail, { subject });
+            }
           }
         } else {
-          // Outbound: update all matching tickets for recipients
+          // Outbound: update matching tickets for recipients
           for (const recipientEmail of [...toEmails, ...ccEmails]) {
-            // Skip if recipient is support email
             if (recipientEmail.toLowerCase() === SUPPORT_EMAIL.toLowerCase()) continue;
 
             const ticketKey = generateTicketKey(message.threadId, recipientEmail);
-            
-            const { error: updateError } = await supabase
-              .from('email_tickets')
-              .update({ 
-                last_outbound_ts: internalTs,
-                // Team responded - now awaiting customer
-                status: 'awaiting_customer',
-                // Clear claim since it's handled
-                claimed_by: null,
-                claimed_at: null,
-              })
-              .eq('ticket_key', ticketKey);
 
-            if (!updateError) stats.ticketsUpdated++;
+            const { data: currentTicket } = await supabase
+              .from('email_tickets')
+              .select('claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
+              .eq('ticket_key', ticketKey)
+              .single();
+
+            if (!currentTicket) continue;
+
+            const outboundTs = new Date(internalTs);
+            const lastInboundTs = currentTicket.last_inbound_ts ? new Date(currentTicket.last_inbound_ts) : null;
+            const lastOutboundTs = currentTicket.last_outbound_ts ? new Date(currentTicket.last_outbound_ts) : null;
+
+            // Only treat as "response" if this outbound is AFTER the customer's message
+            const isResponseToCustomer = lastInboundTs && outboundTs > lastInboundTs;
+
+            // Skip if this outbound is older than what we've already recorded
+            if (lastOutboundTs && outboundTs <= lastOutboundTs) continue;
+
+            if (isResponseToCustomer) {
+              const responder = currentTicket.claimed_by || currentTicket.responded_by || 'team';
+
+              const { error: updateError } = await supabase
+                .from('email_tickets')
+                .update({
+                  last_outbound_ts: internalTs,
+                  responded_by: responder !== 'team' ? responder : null,
+                  responded_at: internalTs,
+                  status: 'awaiting_customer_response',
+                  claimed_by: null,
+                  claimed_at: null,
+                })
+                .eq('ticket_key', ticketKey);
+
+              if (!updateError) {
+                stats.ticketsUpdated++;
+                await logActivity(ticketKey, 'responded', responder, {
+                  detected_from: 'gmail_sync',
+                  message_ts: internalTs
+                });
+              }
+            } else {
+              // Initiating outbound - just track the timestamp, don't change status
+              await supabase
+                .from('email_tickets')
+                .update({ last_outbound_ts: internalTs })
+                .eq('ticket_key', ticketKey);
+            }
           }
         }
       } catch (msgError) {

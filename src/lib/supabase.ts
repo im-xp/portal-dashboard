@@ -20,6 +20,7 @@ export interface EmailMessage {
   internal_ts: string;
   direction: 'inbound' | 'outbound';
   is_noise: boolean;
+  message_id: string | null; // RFC 2822 Message-ID header for threading
   created_at: string;
 }
 
@@ -35,6 +36,7 @@ export interface EmailTicket {
   claimed_at: string | null;
   created_at: string;
   updated_at: string;
+  is_mass_email_thread?: boolean;
 }
 
 export interface EmailSyncState {

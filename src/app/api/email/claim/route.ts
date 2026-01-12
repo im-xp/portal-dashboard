@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { logActivity } from '@/lib/activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
+      await logActivity(ticket_key, 'claimed', user_email);
+
       return NextResponse.json({
         success: true,
         ticket: data,
@@ -86,6 +89,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
+      await logActivity(ticket_key, 'unclaimed', user_email);
+
       return NextResponse.json({
         success: true,
         ticket: data,
@@ -102,7 +107,7 @@ export async function POST(request: NextRequest) {
           last_outbound_ts: now,
           responded_by: user_email,
           responded_at: now,
-          status: 'awaiting_customer',
+          status: 'awaiting_customer_response',
           // Clear the claim since it's handled
           claimed_by: null,
           claimed_at: null,
@@ -115,6 +120,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
+      await logActivity(ticket_key, 'responded', user_email);
+
       return NextResponse.json({
         success: true,
         ticket: data,
@@ -125,7 +132,7 @@ export async function POST(request: NextRequest) {
       const { data, error } = await supabase
         .from('email_tickets')
         .update({
-          status: 'awaiting_response',
+          status: 'awaiting_team_response',
           responded_by: null,
           responded_at: null,
         })
@@ -136,6 +143,8 @@ export async function POST(request: NextRequest) {
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
+
+      await logActivity(ticket_key, 'reopened', user_email);
 
       return NextResponse.json({
         success: true,

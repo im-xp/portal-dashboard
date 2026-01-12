@@ -3,6 +3,14 @@
     {
       "path": "/api/email/sync",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/slack-digest",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/slack-stale",
+      "schedule": "0 * * * *"
     }
   ]
 }

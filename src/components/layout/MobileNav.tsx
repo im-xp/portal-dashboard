@@ -2,17 +2,19 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Package, 
+import {
+  LayoutDashboard,
+  Users,
+  Package,
   FileText,
   RefreshCw,
   Menu,
   X
 } from 'lucide-react';
+import { UserMenu } from './UserMenu';
 
 const navigation = [
   { name: 'Overview', href: '/', icon: LayoutDashboard },
@@ -24,8 +26,13 @@ const navigation = [
 export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { status } = useSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  if (status !== 'authenticated' || pathname?.startsWith('/auth')) {
+    return null;
+  }
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -86,6 +93,9 @@ export function MobileNav() {
               </Link>
             );
           })}
+          <div className="border-t border-zinc-800 mt-2 pt-2">
+            <UserMenu variant="mobile" />
+          </div>
         </div>
       )}
 
@@ -121,4 +131,6 @@ export function MobileNav() {
     </>
   );
 }
+
+
 

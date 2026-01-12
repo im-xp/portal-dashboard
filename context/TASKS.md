@@ -138,3 +138,5 @@
 2. **Payments table ID:** Need to get this from NocoDB to show payment details
 3. **Capacity data:** Where is lodging capacity stored? Need for occupancy tracking
 4. **Refresh frequency:** Real-time vs. manual refresh for MVP?
+
+

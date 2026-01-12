@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { isInternalSender } from '@/lib/gmail';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,10 +26,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Get ticket to find primary thread
+  // Get ticket to find primary thread AND customer email
   const { data: ticket, error: ticketError } = await supabase
     .from('email_tickets')
-    .select('gmail_thread_id')
+    .select('gmail_thread_id, customer_email')
     .eq('ticket_key', ticketKey)
     .single();
 
@@ -65,5 +66,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: messagesError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ messages: messages || [] });
+  // Filter to only messages relevant to THIS customer's conversation
+  // (handles mass email threads where multiple customers replied)
+  const customerEmail = ticket.customer_email.toLowerCase();
+  const relevantMessages = (messages || []).filter(msg => {
+    const fromEmail = msg.from_email.toLowerCase();
+    const toEmails = (msg.to_emails || []).map((e: string) => e.toLowerCase());
+
+    // Include if: customer sent it
+    if (fromEmail === customerEmail) {
+      return true;
+    }
+
+    // Include if: sent TO the customer (team reply)
+    if (toEmails.includes(customerEmail)) {
+      return true;
+    }
+
+    // Include if: internal sender AND customer is the ticket owner
+    // (catches team responses that may have been sent to customer via BCC or forwarded)
+    if (isInternalSender(fromEmail)) {
+      // Only include internal messages that seem to be part of this conversation
+      // by checking if customer appears anywhere in the thread context
+      // For now, exclude internal-to-internal messages that don't include customer
+      return false;
+    }
+
+    return false;
+  });
+
+  return NextResponse.json({ messages: relevantMessages });
 }

@@ -52,6 +52,63 @@ export function ThreadMessages({ ticketKey }: ThreadMessagesProps) {
     return email.split('@')[0];
   };
 
+  const decodeHtmlEntities = (text: string) => {
+    return text
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)))
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&');
+  };
+
+  const stripQuotedContent = (text: string): string => {
+    const lines = text.split('\n');
+    const resultLines: string[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // Gmail/standard quote marker start: "On [day], [month] [date]..."
+      // These often wrap across lines, so detect the start pattern
+      if (/^On\s+(Mon|Tue|Wed|Thu|Fri|Sat|Sun|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d)/i.test(trimmed)) {
+        // Look ahead to see if "wrote:" appears within next few lines
+        const lookAhead = lines.slice(i, i + 4).join(' ');
+        if (/wrote:\s*$/i.test(lookAhead) || /> wrote:/i.test(lookAhead)) {
+          break;
+        }
+      }
+
+      // Line ends with "wrote:" (catches wrapped Gmail quotes)
+      if (/>\s*wrote:\s*$/i.test(trimmed)) {
+        break;
+      }
+
+      // Outlook style: "-----Original Message-----" or "---------- Forwarded message ---------"
+      if (/^-{3,}\s*(Original Message|Forwarded message)/i.test(trimmed)) {
+        break;
+      }
+
+      // Block of consecutive quoted lines (3+ lines starting with >)
+      if (trimmed.startsWith('>')) {
+        let quoteCount = 0;
+        for (let j = i; j < lines.length && j < i + 5; j++) {
+          if (lines[j].trim().startsWith('>')) quoteCount++;
+        }
+        if (quoteCount >= 3) {
+          break;
+        }
+      }
+
+      resultLines.push(line);
+    }
+
+    return resultLines.join('\n').trim();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -111,11 +168,11 @@ export function ThreadMessages({ ticketKey }: ThreadMessagesProps) {
               >
                 {msg.body ? (
                   <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                    {msg.body}
+                    {stripQuotedContent(decodeHtmlEntities(msg.body))}
                   </pre>
                 ) : (
                   <span className="text-zinc-400 italic">
-                    {msg.snippet || '(No content)'}
+                    {msg.snippet ? decodeHtmlEntities(msg.snippet) : '(No content)'}
                   </span>
                 )}
               </div>

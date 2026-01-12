@@ -363,6 +363,29 @@ export async function POST() {
       }
     }
 
+    // Reconcile status and is_followup based on timestamps (handles out-of-order processing)
+    // Tickets where we've responded but status wasn't updated
+    await supabase
+      .from('email_tickets')
+      .update({ status: 'awaiting_customer_response' })
+      .eq('needs_response', false)
+      .eq('status', 'awaiting_team_response');
+
+    // Tickets where customer responded but status shows awaiting customer
+    await supabase
+      .from('email_tickets')
+      .update({ status: 'awaiting_team_response' })
+      .eq('needs_response', true)
+      .eq('status', 'awaiting_customer_response');
+
+    // Tickets where customer replied after we responded = follow-up
+    await supabase
+      .from('email_tickets')
+      .update({ is_followup: true })
+      .eq('needs_response', true)
+      .not('last_outbound_ts', 'is', null)
+      .eq('is_followup', false);
+
     // Update sync state
     await supabase
       .from('email_sync_state')

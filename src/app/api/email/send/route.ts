@@ -17,6 +17,7 @@ interface SendRequest {
   body: string;
   original_subject: string;
   thread_id: string;
+  mark_resolved?: boolean;
 }
 
 interface TokenResponse {
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
 
     const userEmail = session.user.email;
     const reqBody: SendRequest = await request.json();
-    const { ticket_key, to_email, cc_emails, subject, body: emailBody, original_subject, thread_id } = reqBody;
+    const { ticket_key, to_email, cc_emails, subject, body: emailBody, original_subject, thread_id, mark_resolved } = reqBody;
 
     if (!ticket_key || !to_email || !subject || !emailBody) {
       return NextResponse.json(
@@ -256,22 +257,24 @@ export async function POST(request: NextRequest) {
 
     const gmailResult: GmailSendResponse = await gmailResponse.json();
 
-    // Only update thread mappings if we successfully used the original threadId
-    // Otherwise we'd corrupt the ticket by pointing to a new thread that doesn't exist in the support inbox
+    // Always create thread mapping so the message appears in conversation view
+    // If we used the original threadId successfully, also update the ticket's primary thread
+    await supabase.from('thread_ticket_mapping').upsert(
+      {
+        gmail_thread_id: gmailResult.threadId,
+        ticket_key: ticket_key,
+      },
+      { onConflict: 'gmail_thread_id' }
+    );
+
     if (usedThreadIdSuccessfully) {
-      await supabase.from('thread_ticket_mapping').upsert(
-        {
-          gmail_thread_id: gmailResult.threadId,
-          ticket_key: ticket_key,
-        },
-        { onConflict: 'gmail_thread_id' }
-      );
+      // Update ticket's primary thread ID only if we successfully used it
       await supabase
         .from('email_tickets')
         .update({ gmail_thread_id: gmailResult.threadId })
         .eq('ticket_key', ticket_key);
     } else {
-      console.log('[Send API] Sent without threadId - not updating ticket thread mapping to avoid corruption');
+      console.log('[Send API] Sent without threadId - created mapping but not updating ticket primary thread');
     }
 
     const now = new Date().toISOString();
@@ -295,7 +298,7 @@ export async function POST(request: NextRequest) {
         last_outbound_ts: now,
         responded_by: userEmail,
         responded_at: now,
-        status: 'awaiting_customer_response',
+        status: mark_resolved ? 'resolved' : 'awaiting_customer_response',
         claimed_by: null,
         claimed_at: null,
       })

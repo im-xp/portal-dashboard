@@ -9,6 +9,7 @@ export interface ThreadMessage {
   gmail_thread_id: string;
   from_email: string;
   to_emails: string[];
+  cc_emails: string[];
   subject: string | null;
   body: string | null;
   snippet: string | null;
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
   // Fetch all messages from these threads
   const { data: messages, error: messagesError } = await supabase
     .from('email_messages')
-    .select('gmail_message_id, gmail_thread_id, from_email, to_emails, subject, body, snippet, internal_ts, direction')
+    .select('gmail_message_id, gmail_thread_id, from_email, to_emails, cc_emails, subject, body, snippet, internal_ts, direction')
     .in('gmail_thread_id', uniqueThreadIds)
     .eq('is_noise', false)
     .order('internal_ts', { ascending: true });
@@ -72,24 +73,16 @@ export async function GET(request: NextRequest) {
   const relevantMessages = (messages || []).filter(msg => {
     const fromEmail = msg.from_email.toLowerCase();
     const toEmails = (msg.to_emails || []).map((e: string) => e.toLowerCase());
+    const ccEmails = (msg.cc_emails || []).map((e: string) => e.toLowerCase());
 
     // Include if: customer sent it
     if (fromEmail === customerEmail) {
       return true;
     }
 
-    // Include if: sent TO the customer (team reply)
-    if (toEmails.includes(customerEmail)) {
+    // Include if: sent TO or CC'd the customer (team reply)
+    if (toEmails.includes(customerEmail) || ccEmails.includes(customerEmail)) {
       return true;
-    }
-
-    // Include if: internal sender AND customer is the ticket owner
-    // (catches team responses that may have been sent to customer via BCC or forwarded)
-    if (isInternalSender(fromEmail)) {
-      // Only include internal messages that seem to be part of this conversation
-      // by checking if customer appears anywhere in the thread context
-      // For now, exclude internal-to-internal messages that don't include customer
-      return false;
     }
 
     return false;

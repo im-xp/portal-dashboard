@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, AlertTriangle } from 'lucide-react';
+import { Loader2, Send, AlertTriangle, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ComposeResponseProps {
@@ -37,7 +37,7 @@ export function ComposeResponse({
   const subjectChanged =
     subject.trim().toLowerCase() !== replySubject.trim().toLowerCase();
 
-  const handleSend = async () => {
+  const handleSend = async (markResolved = false) => {
     if (!body.trim() || sending) return;
 
     setSending(true);
@@ -55,6 +55,7 @@ export function ComposeResponse({
           body: body.trim(),
           original_subject: replySubject,
           thread_id: threadId,
+          mark_resolved: markResolved,
         }),
       });
 
@@ -147,8 +148,9 @@ export function ComposeResponse({
 
       <div className="flex items-center justify-end gap-2">
         <Button
-          onClick={handleSend}
+          onClick={() => handleSend(false)}
           disabled={!body.trim() || sending || (isMassEmailThread && !subjectChanged)}
+          variant="outline"
           className="gap-2"
         >
           {sending ? (
@@ -160,6 +162,23 @@ export function ComposeResponse({
             <>
               <Send className="h-4 w-4" />
               Send Reply
+            </>
+          )}
+        </Button>
+        <Button
+          onClick={() => handleSend(true)}
+          disabled={!body.trim() || sending || (isMassEmailThread && !subjectChanged)}
+          className="gap-2"
+        >
+          {sending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Sending...
+            </>
+          ) : (
+            <>
+              <CheckCircle className="h-4 w-4" />
+              Send & Resolve
             </>
           )}
         </Button>

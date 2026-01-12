@@ -196,7 +196,7 @@ export async function POST() {
               .from('email_tickets')
               .select('*')
               .eq('customer_email', customerEmail)
-              .eq('status', 'awaiting_customer')
+              .eq('status', 'awaiting_customer_response')
               .order('last_outbound_ts', { ascending: false })
               .limit(1)
               .single();
@@ -239,7 +239,7 @@ export async function POST() {
                 subject: isForward ? subject?.replace(/^Fwd:\s*/i, '') : subject,
                 last_inbound_ts: internalTs,
                 // Customer responded - set status back to awaiting_response
-                status: 'awaiting_response',
+                status: 'awaiting_team_response',
                 // Mark as follow-up if we had already responded
                 is_followup: isFollowup,
                 response_count: newResponseCount,
@@ -312,7 +312,7 @@ export async function POST() {
                   last_outbound_ts: internalTs,
                   responded_by: responder !== 'team' ? responder : null,
                   responded_at: internalTs,
-                  status: 'awaiting_customer',
+                  status: 'awaiting_customer_response',
                   claimed_by: null,
                   claimed_at: null,
                 })

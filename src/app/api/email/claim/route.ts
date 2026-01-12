@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
           last_outbound_ts: now,
           responded_by: user_email,
           responded_at: now,
-          status: 'awaiting_customer',
+          status: 'awaiting_customer_response',
           // Clear the claim since it's handled
           claimed_by: null,
           claimed_at: null,
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       const { data, error } = await supabase
         .from('email_tickets')
         .update({
-          status: 'awaiting_response',
+          status: 'awaiting_team_response',
           responded_by: null,
           responded_at: null,
         })

@@ -295,7 +295,7 @@ export async function POST(request: NextRequest) {
         last_outbound_ts: now,
         responded_by: userEmail,
         responded_at: now,
-        status: 'awaiting_customer',
+        status: 'awaiting_customer_response',
         claimed_by: null,
         claimed_at: null,
       })

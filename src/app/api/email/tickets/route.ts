@@ -30,9 +30,9 @@ export async function GET(request: NextRequest) {
       case 'unclaimed':
         query = query.is('claimed_by', null).eq('needs_response', true);
         break;
-      case 'awaiting_customer':
+      case 'awaiting_customer_response':
         // Tickets we've responded to, waiting for customer reply
-        query = query.eq('status', 'awaiting_customer');
+        query = query.eq('status', 'awaiting_customer_response');
         break;
       case 'resolved':
         // Manually resolved tickets

@@ -67,7 +67,7 @@ export default function EmailQueuePage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [claimingKey, setClaimingKey] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'needs_response' | 'followups' | 'claimed' | 'unclaimed' | 'awaiting_customer_response' | 'resolved' | 'all'>('needs_response');
+  const [filter, setFilter] = useState<'unclaimed' | 'followups' | 'claimed' | 'awaiting_customer_response' | 'resolved' | 'all'>('unclaimed');
   const [error, setError] = useState<string | null>(null);
   const [expandedTickets, setExpandedTickets] = useState<Set<string>>(new Set());
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -191,7 +191,7 @@ export default function EmailQueuePage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
           <div className="flex items-center gap-4">
             <div className="flex gap-2 flex-wrap">
-              {(['needs_response', 'followups', 'unclaimed', 'claimed', 'awaiting_customer_response', 'resolved', 'all'] as const).map((f) => (
+              {(['unclaimed', 'followups', 'awaiting_customer_response', 'claimed', 'resolved', 'all'] as const).map((f) => (
                 <Button
                   key={f}
                   variant={filter === f ? 'default' : 'outline'}
@@ -202,8 +202,9 @@ export default function EmailQueuePage() {
                     f === 'followups' && "bg-orange-100 hover:bg-orange-200 text-orange-700 border-orange-200"
                   )}
                 >
-                  {f === 'awaiting_customer_response' ? 'Awaiting Reply' : 
-                   f === 'followups' ? '🔄 Follow-ups' :
+                  {f === 'awaiting_customer_response' ? 'Awaiting Customer Reply' :
+                   f === 'followups' ? 'Awaiting Team Reply' :
+                   f === 'unclaimed' ? 'Unclaimed' :
                    f.replace('_', ' ')}
                 </Button>
               ))}
@@ -329,10 +330,9 @@ export default function EmailQueuePage() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Mail className="h-5 w-5" />
-              {filter === 'needs_response' ? 'Needs Response' : 
-               filter === 'followups' ? 'Follow-up Required' :
+              {filter === 'unclaimed' ? 'Unclaimed Tickets' :
+               filter === 'followups' ? 'Awaiting Team Reply' :
                filter === 'claimed' ? 'Claimed Tickets' :
-               filter === 'unclaimed' ? 'Unclaimed Tickets' :
                filter === 'awaiting_customer_response' ? 'Awaiting Customer Reply' :
                filter === 'resolved' ? 'Resolved Tickets' : 'All Tickets'}
             </CardTitle>
@@ -383,12 +383,12 @@ export default function EmailQueuePage() {
                             </Badge>
                           )}
                           {ticket.status === 'awaiting_customer_response' && (
-                            <Badge 
-                              variant="outline" 
+                            <Badge
+                              variant="outline"
                               className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200"
                             >
                               <MessageSquare className="h-3 w-3 mr-1" />
-                              Awaiting Reply
+                              Awaiting Customer Reply
                             </Badge>
                           )}
                           {ticket.status === 'resolved' && (

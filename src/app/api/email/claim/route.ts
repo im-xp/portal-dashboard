@@ -108,9 +108,6 @@ export async function POST(request: NextRequest) {
           responded_by: user_email,
           responded_at: now,
           status: 'awaiting_customer_response',
-          // Clear the claim since it's handled
-          claimed_by: null,
-          claimed_at: null,
         })
         .eq('ticket_key', ticket_key)
         .select()

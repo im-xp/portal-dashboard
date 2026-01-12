@@ -299,8 +299,6 @@ export async function POST(request: NextRequest) {
         responded_by: userEmail,
         responded_at: now,
         status: mark_resolved ? 'resolved' : 'awaiting_customer_response',
-        claimed_by: null,
-        claimed_at: null,
       })
       .eq('ticket_key', ticket_key);
 

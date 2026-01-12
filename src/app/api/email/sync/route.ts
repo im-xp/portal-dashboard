@@ -337,8 +337,6 @@ export async function POST() {
                   responded_by: responder !== 'team' ? responder : null,
                   responded_at: internalTs,
                   status: 'awaiting_customer_response',
-                  claimed_by: null,
-                  claimed_at: null,
                 })
                 .eq('ticket_key', currentTicket.ticket_key);
 

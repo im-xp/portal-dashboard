@@ -43,8 +43,8 @@ export async function POST() {
       .select('*')
       .single();
 
-    // Build query - get messages from last 14 days or since last sync
-    const query = 'newer_than:14d';
+    // Build query - get messages from last 30 days or since last sync
+    const query = 'newer_than:30d';
     
     console.log(`[Gmail Sync] Starting sync with query: ${query}`);
 
@@ -279,29 +279,53 @@ export async function POST() {
             }
           }
         } else {
-          // Outbound: update matching tickets for recipients
-          for (const recipientEmail of [...toEmails, ...ccEmails]) {
-            if (recipientEmail.toLowerCase() === SUPPORT_EMAIL.toLowerCase()) continue;
+          // Outbound: update ALL tickets in this thread (not just recipients)
+          // This handles multi-customer threads where a reply to one customer
+          // should mark all customers in the thread as responded to
 
-            const ticketKey = generateTicketKey(message.threadId, recipientEmail);
+          // Get all tickets linked to this thread
+          const { data: threadTickets } = await supabase
+            .from('email_tickets')
+            .select('ticket_key, claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
+            .eq('gmail_thread_id', message.threadId);
 
-            const { data: currentTicket } = await supabase
+          // Also check thread_ticket_mapping for tickets with different primary thread
+          const { data: mappedTickets } = await supabase
+            .from('thread_ticket_mapping')
+            .select('ticket_key')
+            .eq('gmail_thread_id', message.threadId);
+
+          const mappedTicketKeys = mappedTickets?.map(m => m.ticket_key) || [];
+
+          let additionalTickets: typeof threadTickets = [];
+          if (mappedTicketKeys.length > 0) {
+            const { data: mapped } = await supabase
               .from('email_tickets')
-              .select('claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
-              .eq('ticket_key', ticketKey)
-              .single();
+              .select('ticket_key, claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
+              .in('ticket_key', mappedTicketKeys);
+            additionalTickets = mapped || [];
+          }
 
-            if (!currentTicket) continue;
+          // Combine and dedupe tickets
+          const allTickets = [...(threadTickets || []), ...additionalTickets];
+          const seenKeys = new Set<string>();
+          const uniqueTickets = allTickets.filter(t => {
+            if (seenKeys.has(t.ticket_key)) return false;
+            seenKeys.add(t.ticket_key);
+            return true;
+          });
 
-            const outboundTs = new Date(internalTs);
+          const outboundTs = new Date(internalTs);
+
+          for (const currentTicket of uniqueTickets) {
             const lastInboundTs = currentTicket.last_inbound_ts ? new Date(currentTicket.last_inbound_ts) : null;
             const lastOutboundTs = currentTicket.last_outbound_ts ? new Date(currentTicket.last_outbound_ts) : null;
 
-            // Only treat as "response" if this outbound is AFTER the customer's message
-            const isResponseToCustomer = lastInboundTs && outboundTs > lastInboundTs;
-
             // Skip if this outbound is older than what we've already recorded
             if (lastOutboundTs && outboundTs <= lastOutboundTs) continue;
+
+            // Only treat as "response" if this outbound is AFTER the customer's message
+            const isResponseToCustomer = lastInboundTs && outboundTs > lastInboundTs;
 
             if (isResponseToCustomer) {
               const responder = currentTicket.claimed_by || currentTicket.responded_by || 'team';
@@ -316,11 +340,11 @@ export async function POST() {
                   claimed_by: null,
                   claimed_at: null,
                 })
-                .eq('ticket_key', ticketKey);
+                .eq('ticket_key', currentTicket.ticket_key);
 
               if (!updateError) {
                 stats.ticketsUpdated++;
-                await logActivity(ticketKey, 'responded', responder, {
+                await logActivity(currentTicket.ticket_key, 'responded', responder, {
                   detected_from: 'gmail_sync',
                   message_ts: internalTs
                 });
@@ -330,7 +354,7 @@ export async function POST() {
               await supabase
                 .from('email_tickets')
                 .update({ last_outbound_ts: internalTs })
-                .eq('ticket_key', ticketKey);
+                .eq('ticket_key', currentTicket.ticket_key);
             }
           }
         }

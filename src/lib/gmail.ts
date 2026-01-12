@@ -156,7 +156,7 @@ function extractBody(payload: GmailMessage['payload'] & { body?: { data?: string
     return decodeBase64Url(payload.body.data);
   }
 
-  // Check parts for text/plain
+  // Check parts for text/plain first
   if (payload.parts) {
     for (const part of payload.parts) {
       if (part.mimeType === 'text/plain' && part.body?.data) {
@@ -172,9 +172,7 @@ function extractBody(payload: GmailMessage['payload'] & { body?: { data?: string
     for (const part of payload.parts) {
       if (part.mimeType === 'text/html' && part.body?.data) {
         const html = decodeBase64Url(part.body.data);
-        // Strip HTML tags and decode entities for plain text
-        const stripped = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-        return decodeHtmlEntities(stripped);
+        return htmlToText(html);
       }
     }
   }
@@ -193,6 +191,43 @@ function decodeBase64Url(data: string): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Convert HTML email to plain text while preserving paragraph structure
+ * This is critical for quote detection which relies on line breaks
+ */
+function htmlToText(html: string): string {
+  let text = html;
+
+  // Convert block elements to newlines BEFORE stripping tags
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+  text = text.replace(/<\/p>/gi, '\n\n');
+  text = text.replace(/<\/div>/gi, '\n');
+  text = text.replace(/<\/tr>/gi, '\n');
+  text = text.replace(/<\/li>/gi, '\n');
+  text = text.replace(/<\/h[1-6]>/gi, '\n\n');
+  text = text.replace(/<hr\s*\/?>/gi, '\n---\n');
+
+  // Blockquotes become newlines (quote detection relies on "On ... wrote:" patterns)
+  text = text.replace(/<blockquote[^>]*>/gi, '\n');
+  text = text.replace(/<\/blockquote>/gi, '\n');
+
+  // Strip remaining HTML tags
+  text = text.replace(/<[^>]*>/g, '');
+
+  // Decode HTML entities
+  text = decodeHtmlEntities(text);
+
+  // Normalize whitespace while preserving newlines
+  // Replace multiple spaces with single space (but not newlines)
+  text = text.replace(/[^\S\n]+/g, ' ');
+  // Collapse multiple newlines to max 2
+  text = text.replace(/\n{3,}/g, '\n\n');
+  // Trim whitespace from each line
+  text = text.split('\n').map(line => line.trim()).join('\n');
+
+  return text.trim();
 }
 
 /**

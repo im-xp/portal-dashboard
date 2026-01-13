@@ -114,7 +114,7 @@ export default function EmailQueuePage() {
 
   const fetchSyncStatus = async () => {
     try {
-      const response = await fetch('/api/email/sync');
+      const response = await fetch('/api/email/sync?status=true');
       const data = await response.json();
       setSyncStatus(data);
     } catch (err) {

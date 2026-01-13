@@ -7,13 +7,33 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const filter = searchParams.get('filter') || 'needs_response';
+    const search = searchParams.get('search')?.trim() || '';
     const limit = parseInt(searchParams.get('limit') || '100');
+
+    // If search is provided, find matching ticket keys first
+    let searchTicketKeys: string[] | null = null;
+    if (search.length >= 3) {
+      searchTicketKeys = await findMatchingTickets(search);
+      if (searchTicketKeys.length === 0) {
+        return NextResponse.json({
+          tickets: [],
+          count: 0,
+          filter,
+          search,
+        });
+      }
+    }
 
     let query = supabase
       .from('email_tickets')
       .select('*')
       .order('last_inbound_ts', { ascending: false })
       .limit(limit);
+
+    // Apply search filter if we have matching tickets
+    if (searchTicketKeys) {
+      query = query.in('ticket_key', searchTicketKeys);
+    }
 
     // Apply filter
     switch (filter) {
@@ -92,6 +112,7 @@ export async function GET(request: NextRequest) {
       tickets: enrichedTickets,
       count: enrichedTickets.length,
       filter,
+      search: search || undefined,
     });
   } catch (error) {
     console.error('[Tickets API] Error:', error);
@@ -105,5 +126,52 @@ function formatAge(hours: number | null): string {
   if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
   return `${days}d`;
+}
+
+async function findMatchingTickets(search: string): Promise<string[]> {
+  const results = new Set<string>();
+
+  // 1. Prefix match on customer_email (uses existing B-tree index)
+  const { data: emailMatches } = await supabase
+    .from('email_tickets')
+    .select('ticket_key')
+    .ilike('customer_email', `${search}%`);
+
+  emailMatches?.forEach(t => results.add(t.ticket_key));
+
+  // 2. Full-text search on ticket subject/summary
+  // Format search terms for tsquery with prefix matching
+  const tsQuery = search
+    .split(/\s+/)
+    .filter(term => term.length > 0)
+    .map(term => `${term}:*`)
+    .join(' & ');
+
+  if (tsQuery) {
+    const { data: ticketFtsMatches } = await supabase
+      .from('email_tickets')
+      .select('ticket_key')
+      .textSearch('search_vector', tsQuery);
+
+    ticketFtsMatches?.forEach(t => results.add(t.ticket_key));
+
+    // 3. Full-text search on message body/subject, then get parent tickets
+    const { data: messageFtsMatches } = await supabase
+      .from('email_messages')
+      .select('gmail_thread_id')
+      .textSearch('search_vector', tsQuery);
+
+    if (messageFtsMatches?.length) {
+      const threadIds = [...new Set(messageFtsMatches.map(m => m.gmail_thread_id))];
+      const { data: ticketsFromMessages } = await supabase
+        .from('email_tickets')
+        .select('ticket_key')
+        .in('gmail_thread_id', threadIds);
+
+      ticketsFromMessages?.forEach(t => results.add(t.ticket_key));
+    }
+  }
+
+  return Array.from(results);
 }
 

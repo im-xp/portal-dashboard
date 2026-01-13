@@ -27,6 +27,7 @@ import { TicketNotes } from '@/components/email/TicketNotes';
 import { TicketActivity } from '@/components/email/TicketActivity';
 import { ComposeResponse } from '@/components/email/ComposeResponse';
 import { ThreadMessages } from '@/components/email/ThreadMessages';
+import { SearchInput } from '@/components/email/SearchInput';
 
 interface EmailTicket {
   ticket_key: string;
@@ -71,6 +72,8 @@ export default function EmailQueuePage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedTickets, setExpandedTickets] = useState<Set<string>>(new Set());
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   const toggleExpanded = (ticketKey: string) => {
     setExpandedTickets(prev => {
@@ -86,7 +89,11 @@ export default function EmailQueuePage() {
 
   const fetchTickets = useCallback(async () => {
     try {
-      const response = await fetch(`/api/email/tickets?filter=${filter}`);
+      const params = new URLSearchParams({ filter });
+      if (debouncedSearch.length >= 3) {
+        params.set('search', debouncedSearch);
+      }
+      const response = await fetch(`/api/email/tickets?${params}`);
       const data = await response.json();
       if (data.error) {
         setError(data.error);
@@ -97,7 +104,13 @@ export default function EmailQueuePage() {
     } catch (err) {
       setError(String(err));
     }
-  }, [filter]);
+  }, [filter, debouncedSearch]);
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const fetchSyncStatus = async () => {
     try {
@@ -187,6 +200,19 @@ export default function EmailQueuePage() {
       />
 
       <div className="p-4 md:p-8">
+        {/* Search */}
+        <div className="mb-4">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search by customer email or keyword..."
+            className="max-w-md"
+          />
+          {search.length > 0 && search.length < 3 && (
+            <p className="text-xs text-zinc-400 mt-1">Type at least 3 characters to search</p>
+          )}
+        </div>
+
         {/* Status Bar */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
           <div className="flex items-center gap-4">
@@ -344,9 +370,19 @@ export default function EmailQueuePage() {
               </div>
             ) : tickets.length === 0 ? (
               <div className="text-center py-12 text-zinc-500">
-                <CheckCircle className="h-12 w-12 mx-auto mb-4 text-emerald-400" />
-                <p className="text-lg font-medium">All caught up!</p>
-                <p className="text-sm">No tickets matching this filter.</p>
+                {debouncedSearch.length >= 3 ? (
+                  <>
+                    <Mail className="h-12 w-12 mx-auto mb-4 text-zinc-300" />
+                    <p className="text-lg font-medium">No results found</p>
+                    <p className="text-sm">No tickets match &quot;{debouncedSearch}&quot;</p>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-12 w-12 mx-auto mb-4 text-emerald-400" />
+                    <p className="text-lg font-medium">All caught up!</p>
+                    <p className="text-sm">No tickets matching this filter.</p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-2">

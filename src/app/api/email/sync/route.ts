@@ -20,7 +20,7 @@ import { summarizeEmail } from '@/lib/gemini';
 
 const SUPPORT_EMAIL = process.env.GMAIL_SUPPORT_ADDRESS || 'theportalsupport@icelandeclipse.com';
 
-export async function POST() {
+async function runSync() {
   try {
     // Check if Gmail is configured
     if (!process.env.GOOGLE_REFRESH_TOKEN) {
@@ -410,27 +410,36 @@ export async function POST() {
   }
 }
 
-export async function GET() {
-  // Health check / status endpoint
-  const { data: syncState } = await supabase
-    .from('email_sync_state')
-    .select('*')
-    .single();
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
 
-  const { count: ticketCount } = await supabase
-    .from('email_tickets')
-    .select('*', { count: 'exact', head: true });
+  if (searchParams.get('status') === 'true') {
+    const { data: syncState } = await supabase
+      .from('email_sync_state')
+      .select('*')
+      .single();
 
-  const { count: messageCount } = await supabase
-    .from('email_messages')
-    .select('*', { count: 'exact', head: true });
+    const { count: ticketCount } = await supabase
+      .from('email_tickets')
+      .select('*', { count: 'exact', head: true });
 
-  return NextResponse.json({
-    status: 'ok',
-    configured: !!process.env.GOOGLE_REFRESH_TOKEN,
-    lastSyncAt: syncState?.last_sync_at,
-    ticketCount,
-    messageCount,
-  });
+    const { count: messageCount } = await supabase
+      .from('email_messages')
+      .select('*', { count: 'exact', head: true });
+
+    return NextResponse.json({
+      status: 'ok',
+      configured: !!process.env.GOOGLE_REFRESH_TOKEN,
+      lastSyncAt: syncState?.last_sync_at,
+      ticketCount,
+      messageCount,
+    });
+  }
+
+  return runSync();
+}
+
+export async function POST() {
+  return runSync();
 }
 

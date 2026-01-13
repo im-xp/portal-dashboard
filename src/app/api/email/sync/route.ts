@@ -14,6 +14,7 @@ import {
   isForwardedEmail,
   extractForwardedSender,
   getMessageDirection,
+  stripQuotedContent,
 } from '@/lib/gmail';
 import { summarizeEmail } from '@/lib/gemini';
 
@@ -93,7 +94,10 @@ export async function POST() {
           ? new Date(parseInt(message.internalDate)).toISOString()
           : new Date().toISOString();
 
-        // Insert message with body
+        // Strip quoted content from body before storing
+        const strippedBody = message.body ? stripQuotedContent(message.body) : null;
+
+        // Insert message with stripped body
         const { error: insertError } = await supabase
           .from('email_messages')
           .insert({
@@ -104,7 +108,7 @@ export async function POST() {
             cc_emails: ccEmails,
             subject,
             snippet: message.snippet,
-            body: message.body,
+            body: strippedBody,
             internal_ts: internalTs,
             direction,
             is_noise: isNoise,

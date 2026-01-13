@@ -401,3 +401,55 @@ export function buildGmailLink(threadId: string): string {
   return `https://mail.google.com/mail/u/0/#inbox/${threadId}`;
 }
 
+/**
+ * Strip quoted content from email body
+ * Removes reply chains, forwarded message markers, and quote blocks
+ * to keep only the new/original content
+ */
+export function stripQuotedContent(text: string): string {
+  if (!text) return '';
+
+  const lines = text.split('\n');
+  const resultLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Gmail/standard quote marker start: "On [day], [month] [date]..."
+    // These often wrap across lines, so detect the start pattern
+    if (/^On\s+(Mon|Tue|Wed|Thu|Fri|Sat|Sun|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d)/i.test(trimmed)) {
+      // Look ahead to see if "wrote:" appears within next few lines
+      const lookAhead = lines.slice(i, i + 4).join(' ');
+      if (/wrote:\s*$/i.test(lookAhead) || /> wrote:/i.test(lookAhead)) {
+        break;
+      }
+    }
+
+    // Line ends with "wrote:" (catches wrapped Gmail quotes)
+    if (/>\s*wrote:\s*$/i.test(trimmed)) {
+      break;
+    }
+
+    // Outlook style: "-----Original Message-----" or "---------- Forwarded message ---------"
+    if (/^-{3,}\s*(Original Message|Forwarded message)/i.test(trimmed)) {
+      break;
+    }
+
+    // Block of consecutive quoted lines (3+ lines starting with >)
+    if (trimmed.startsWith('>')) {
+      let quoteCount = 0;
+      for (let j = i; j < lines.length && j < i + 5; j++) {
+        if (lines[j].trim().startsWith('>')) quoteCount++;
+      }
+      if (quoteCount >= 3) {
+        break;
+      }
+    }
+
+    resultLines.push(line);
+  }
+
+  return resultLines.join('\n').trim();
+}
+

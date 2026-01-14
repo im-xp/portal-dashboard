@@ -598,22 +598,24 @@ export default function EmailQueuePage() {
                             </>
                           )}
 
-                          {/* Reply from Dashboard - available to any team member on non-resolved tickets */}
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => {
-                              setReplyingTo(ticket.ticket_key);
-                              if (!expandedTickets.has(ticket.ticket_key)) {
-                                setExpandedTickets(prev => new Set([...prev, ticket.ticket_key]));
-                              }
-                            }}
-                            disabled={replyingTo === ticket.ticket_key}
-                            className="gap-1"
-                          >
-                            <Reply className="h-4 w-4" />
-                            Reply
-                          </Button>
+                          {/* Reply from Dashboard - available to any team member once ticket is claimed */}
+                          {ticket.claimed_by && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => {
+                                setReplyingTo(ticket.ticket_key);
+                                if (!expandedTickets.has(ticket.ticket_key)) {
+                                  setExpandedTickets(prev => new Set([...prev, ticket.ticket_key]));
+                                }
+                              }}
+                              disabled={replyingTo === ticket.ticket_key}
+                              className="gap-1"
+                            >
+                              <Reply className="h-4 w-4" />
+                              Reply
+                            </Button>
+                          )}
                         </>
                       )}
 

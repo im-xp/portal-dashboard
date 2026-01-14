@@ -582,19 +582,21 @@ export default function EmailQueuePage() {
                                 </Button>
                               ) : null}
 
-                              {/* Mark as Replied - marks ticket as handled */}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleClaim(ticket.ticket_key, 'mark_responded')}
-                                disabled={claimingKey === ticket.ticket_key}
-                              >
-                                {claimingKey === ticket.ticket_key ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  'Mark Replied'
-                                )}
-                              </Button>
+                              {/* Mark as Replied - only available once claimed */}
+                              {ticket.claimed_by && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleClaim(ticket.ticket_key, 'mark_responded')}
+                                  disabled={claimingKey === ticket.ticket_key}
+                                >
+                                  {claimingKey === ticket.ticket_key ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    'Mark Replied'
+                                  )}
+                                </Button>
+                              )}
                             </>
                           )}
 

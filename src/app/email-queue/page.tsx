@@ -547,71 +547,72 @@ export default function EmailQueuePage() {
                             </>
                           )}
                         </Button>
-                      ) : ticket.status === 'awaiting_customer_response' ? (
-                        // Awaiting customer - no action needed, just viewing
-                        <span className="text-sm text-zinc-400 italic">Awaiting customer</span>
                       ) : (
-                        // Needs response - show claim/unclaim and responded buttons
+                        // Active tickets - show claim/unclaim and reply buttons
                         <>
-                          {ticket.claimed_by === currentUser ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleClaim(ticket.ticket_key, 'unclaim')}
-                              disabled={claimingKey === ticket.ticket_key}
-                            >
-                              {claimingKey === ticket.ticket_key ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                'Unclaim'
-                              )}
-                            </Button>
-                          ) : !ticket.claimed_by ? (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              onClick={() => handleClaim(ticket.ticket_key, 'claim')}
-                              disabled={claimingKey === ticket.ticket_key}
-                            >
-                              {claimingKey === ticket.ticket_key ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                'Claim'
-                              )}
-                            </Button>
-                          ) : null}
+                          {ticket.status === 'awaiting_customer_response' ? (
+                            <span className="text-sm text-zinc-400 italic">Awaiting customer</span>
+                          ) : (
+                            <>
+                              {ticket.claimed_by === currentUser ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleClaim(ticket.ticket_key, 'unclaim')}
+                                  disabled={claimingKey === ticket.ticket_key}
+                                >
+                                  {claimingKey === ticket.ticket_key ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    'Unclaim'
+                                  )}
+                                </Button>
+                              ) : !ticket.claimed_by ? (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleClaim(ticket.ticket_key, 'claim')}
+                                  disabled={claimingKey === ticket.ticket_key}
+                                >
+                                  {claimingKey === ticket.ticket_key ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    'Claim'
+                                  )}
+                                </Button>
+                              ) : null}
 
-                          {/* Reply from Dashboard */}
-                          {ticket.claimed_by === currentUser && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              onClick={() => {
-                                setReplyingTo(ticket.ticket_key);
-                                if (!expandedTickets.has(ticket.ticket_key)) {
-                                  setExpandedTickets(prev => new Set([...prev, ticket.ticket_key]));
-                                }
-                              }}
-                              disabled={replyingTo === ticket.ticket_key}
-                              className="gap-1"
-                            >
-                              <Reply className="h-4 w-4" />
-                              Reply
-                            </Button>
+                              {/* Mark as Replied - marks ticket as handled */}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleClaim(ticket.ticket_key, 'mark_responded')}
+                                disabled={claimingKey === ticket.ticket_key}
+                              >
+                                {claimingKey === ticket.ticket_key ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  'Mark Replied'
+                                )}
+                              </Button>
+                            </>
                           )}
 
-                          {/* Mark as Replied - marks ticket as handled */}
+                          {/* Reply from Dashboard - available to any team member on non-resolved tickets */}
                           <Button
-                            variant="outline"
+                            variant="default"
                             size="sm"
-                            onClick={() => handleClaim(ticket.ticket_key, 'mark_responded')}
-                            disabled={claimingKey === ticket.ticket_key}
+                            onClick={() => {
+                              setReplyingTo(ticket.ticket_key);
+                              if (!expandedTickets.has(ticket.ticket_key)) {
+                                setExpandedTickets(prev => new Set([...prev, ticket.ticket_key]));
+                              }
+                            }}
+                            disabled={replyingTo === ticket.ticket_key}
+                            className="gap-1"
                           >
-                            {claimingKey === ticket.ticket_key ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              'Mark Replied'
-                            )}
+                            <Reply className="h-4 w-4" />
+                            Reply
                           </Button>
                         </>
                       )}

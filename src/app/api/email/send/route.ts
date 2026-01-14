@@ -218,8 +218,9 @@ export async function POST(request: NextRequest) {
 
     // If 404 with threadId, retry without it (thread may not exist in user's delegated access)
     // The In-Reply-To and References headers will still maintain threading for the recipient
+    let errorText: string | null = null;
     if (!gmailResponse.ok && useThreadId) {
-      const errorText = await gmailResponse.text();
+      errorText = await gmailResponse.text();
       if (errorText.includes('404') || errorText.includes('notFound')) {
         console.log('[Send API] ThreadId not found, retrying without threadId (threading headers will maintain conversation)');
         gmailPayload = { raw: encodedEmail };
@@ -231,13 +232,16 @@ export async function POST(request: NextRequest) {
           },
           body: JSON.stringify(gmailPayload),
         });
+        errorText = null; // Reset so we read from new response if it fails
       }
     } else if (gmailResponse.ok && useThreadId) {
       usedThreadIdSuccessfully = true;
     }
 
     if (!gmailResponse.ok) {
-      const errorText = await gmailResponse.text();
+      if (!errorText) {
+        errorText = await gmailResponse.text();
+      }
       console.error('[Send API] Gmail error:', errorText);
 
       if (errorText.includes('Mail service not enabled') ||

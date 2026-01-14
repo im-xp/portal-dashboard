@@ -298,14 +298,16 @@ async function runSync() {
             }
           }
         } else {
-          // Outbound: update ALL tickets in this thread (not just recipients)
-          // This handles multi-customer threads where a reply to one customer
-          // should mark all customers in the thread as responded to
+          // Outbound: only update tickets where customer was a recipient
+          const outboundRecipients = new Set([
+            ...toEmails.map(e => e.toLowerCase()),
+            ...ccEmails.map(e => e.toLowerCase()),
+          ]);
 
           // Get all tickets linked to this thread
           const { data: threadTickets } = await supabase
             .from('email_tickets')
-            .select('ticket_key, claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
+            .select('ticket_key, customer_email, claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
             .eq('gmail_thread_id', message.threadId);
 
           // Also check thread_ticket_mapping for tickets with different primary thread
@@ -320,7 +322,7 @@ async function runSync() {
           if (mappedTicketKeys.length > 0) {
             const { data: mapped } = await supabase
               .from('email_tickets')
-              .select('ticket_key, claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
+              .select('ticket_key, customer_email, claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
               .in('ticket_key', mappedTicketKeys);
             additionalTickets = mapped || [];
           }
@@ -337,6 +339,9 @@ async function runSync() {
           const outboundTs = new Date(internalTs);
 
           for (const currentTicket of uniqueTickets) {
+            // Only update if this customer was actually a recipient
+            if (!outboundRecipients.has(currentTicket.customer_email.toLowerCase())) continue;
+
             const lastInboundTs = currentTicket.last_inbound_ts ? new Date(currentTicket.last_inbound_ts) : null;
             const lastOutboundTs = currentTicket.last_outbound_ts ? new Date(currentTicket.last_outbound_ts) : null;
 

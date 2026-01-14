@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Loader2, Send, AlertTriangle, CheckCircle, X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ComposeResponseProps {
@@ -11,6 +11,7 @@ interface ComposeResponseProps {
   originalSubject: string;
   threadId: string;
   isMassEmailThread?: boolean;
+  existingCCs?: string[];
   onSent?: () => void;
   onCancel?: () => void;
 }
@@ -21,6 +22,7 @@ export function ComposeResponse({
   originalSubject,
   threadId,
   isMassEmailThread = false,
+  existingCCs = [],
   onSent,
   onCancel,
 }: ComposeResponseProps) {
@@ -29,13 +31,49 @@ export function ComposeResponse({
     : `Re: ${originalSubject}`;
 
   const [subject, setSubject] = useState(replySubject);
-  const [ccEmails, setCcEmails] = useState('');
+  const [ccList, setCcList] = useState<string[]>([]);
+  const [ccInput, setCcInput] = useState('');
+  const [showCcInput, setShowCcInput] = useState(false);
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const initializedCCs = useRef(false);
+
+  useEffect(() => {
+    if (initializedCCs.current || existingCCs.length === 0) return;
+    initializedCCs.current = true;
+    const normalizedCustomer = customerEmail.toLowerCase();
+    const filtered = existingCCs
+      .map(e => e.toLowerCase())
+      .filter(e => e !== normalizedCustomer && !e.endsWith('@im-xp.com'));
+    setCcList([...new Set(filtered)]);
+  }, [existingCCs, customerEmail]);
 
   const subjectChanged =
     subject.trim().toLowerCase() !== replySubject.trim().toLowerCase();
+
+  const addCc = (email: string) => {
+    const normalized = email.trim().toLowerCase();
+    if (normalized && !ccList.includes(normalized) && normalized !== customerEmail.toLowerCase()) {
+      setCcList([...ccList, normalized]);
+    }
+    setCcInput('');
+    setShowCcInput(false);
+  };
+
+  const removeCc = (email: string) => {
+    setCcList(ccList.filter(e => e !== email));
+  };
+
+  const handleCcKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addCc(ccInput);
+    } else if (e.key === 'Escape') {
+      setCcInput('');
+      setShowCcInput(false);
+    }
+  };
 
   const handleSend = async (markResolved = false) => {
     if (!body.trim() || sending) return;
@@ -50,7 +88,7 @@ export function ComposeResponse({
         body: JSON.stringify({
           ticket_key: ticketKey,
           to_email: customerEmail,
-          cc_emails: ccEmails.trim() || undefined,
+          cc_emails: ccList.length > 0 ? ccList.join(', ') : undefined,
           subject: subject.trim(),
           body: body.trim(),
           original_subject: replySubject,
@@ -66,7 +104,8 @@ export function ComposeResponse({
       }
 
       setBody('');
-      setCcEmails('');
+      setCcList([]);
+      setCcInput('');
       setSubject(replySubject);
       onSent?.();
     } catch (err) {
@@ -93,13 +132,47 @@ export function ComposeResponse({
 
       <div className="space-y-1">
         <label className="text-sm font-medium text-zinc-700">CC</label>
-        <input
-          type="text"
-          value={ccEmails}
-          onChange={(e) => setCcEmails(e.target.value)}
-          placeholder="teammate@im-xp.com"
-          className="w-full text-sm border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <div className="flex flex-wrap items-center gap-1.5 min-h-[36px] border rounded-md px-2 py-1.5 bg-white">
+          {ccList.map(email => (
+            <span
+              key={email}
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-100 text-zinc-700 text-sm rounded-md"
+            >
+              {email}
+              <button
+                type="button"
+                onClick={() => removeCc(email)}
+                className="text-zinc-400 hover:text-zinc-600"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          {showCcInput ? (
+            <input
+              type="email"
+              value={ccInput}
+              onChange={(e) => setCcInput(e.target.value)}
+              onKeyDown={handleCcKeyDown}
+              onBlur={() => {
+                if (ccInput.trim()) addCc(ccInput);
+                else setShowCcInput(false);
+              }}
+              placeholder="email@example.com"
+              className="flex-1 min-w-[150px] text-sm outline-none bg-transparent py-0.5"
+              autoFocus
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCcInput(true)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-sm text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 rounded-md"
+            >
+              <Plus className="h-3 w-3" />
+              Add
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1">

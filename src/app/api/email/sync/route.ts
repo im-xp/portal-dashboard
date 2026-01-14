@@ -66,11 +66,26 @@ async function runSync() {
     const newMessageRefs = messageRefs.filter(r => !existingSet.has(r.id));
     console.log(`[Gmail Sync] ${newMessageRefs.length} new messages to process`);
 
-    // Process only new messages
-    for (const ref of newMessageRefs) {
+    // Fetch all new messages in batches to avoid Gmail rate limits
+    // Then sort chronologically (oldest first) to ensure correct ticket updates
+    const BATCH_SIZE = 10;
+    const fullMessages = [];
+    for (let i = 0; i < newMessageRefs.length; i += BATCH_SIZE) {
+      const batch = newMessageRefs.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(ref => getMessageFull(ref.id))
+      );
+      fullMessages.push(...batchResults);
+    }
+    fullMessages.sort((a, b) => {
+      const tsA = a.internalDate ? parseInt(a.internalDate) : 0;
+      const tsB = b.internalDate ? parseInt(b.internalDate) : 0;
+      return tsA - tsB;
+    });
+
+    // Process messages in chronological order
+    for (const message of fullMessages) {
       try {
-        // Fetch full message including body
-        const message = await getMessageFull(ref.id);
         stats.messagesProcessed++;
 
         // Extract headers
@@ -82,7 +97,7 @@ async function runSync() {
         
         const fromEmail = parseEmailAddress(fromHeader);
         if (!fromEmail) {
-          stats.errors.push(`No from email for message ${ref.id}`);
+          stats.errors.push(`No from email for message ${message.id}`);
           continue;
         }
 
@@ -116,7 +131,7 @@ async function runSync() {
           });
 
         if (insertError) {
-          stats.errors.push(`Insert error for ${ref.id}: ${insertError.message}`);
+          stats.errors.push(`Insert error for ${message.id}: ${insertError.message}`);
           continue;
         }
 
@@ -361,7 +376,7 @@ async function runSync() {
           }
         }
       } catch (msgError) {
-        stats.errors.push(`Error processing ${ref.id}: ${String(msgError)}`);
+        stats.errors.push(`Error processing ${message.id}: ${String(msgError)}`);
       }
     }
 

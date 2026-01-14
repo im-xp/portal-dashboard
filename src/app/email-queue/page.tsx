@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils';
 import { TicketNotes } from '@/components/email/TicketNotes';
 import { TicketActivity } from '@/components/email/TicketActivity';
 import { ComposeResponse } from '@/components/email/ComposeResponse';
-import { ThreadMessages } from '@/components/email/ThreadMessages';
+import { ThreadMessages, ThreadMessage } from '@/components/email/ThreadMessages';
 import { SearchInput } from '@/components/email/SearchInput';
 
 interface EmailTicket {
@@ -74,6 +74,7 @@ export default function EmailQueuePage() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [threadCCs, setThreadCCs] = useState<Record<string, string[]>>({});
 
   const toggleExpanded = (ticketKey: string) => {
     setExpandedTickets(prev => {
@@ -86,6 +87,13 @@ export default function EmailQueuePage() {
       return next;
     });
   };
+
+  const handleThreadLoaded = useCallback((ticketKey: string, messages: ThreadMessage[]) => {
+    if (messages.length === 0) return;
+    const lastMessage = messages[messages.length - 1];
+    const ccs = lastMessage.cc_emails || [];
+    setThreadCCs(prev => ({ ...prev, [ticketKey]: ccs }));
+  }, []);
 
   const fetchTickets = useCallback(async () => {
     try {
@@ -488,7 +496,10 @@ export default function EmailQueuePage() {
                         {/* Conversation, Notes and Activity - shown when expanded */}
                         {isExpanded && (
                           <div className="mt-4 pt-4 border-t border-zinc-200 space-y-4">
-                            <ThreadMessages ticketKey={ticket.ticket_key} />
+                            <ThreadMessages
+                              ticketKey={ticket.ticket_key}
+                              onThreadLoaded={(msgs) => handleThreadLoaded(ticket.ticket_key, msgs)}
+                            />
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-zinc-100">
                               <TicketNotes ticketKey={ticket.ticket_key} currentUser={currentUser} />
                               <TicketActivity ticketKey={ticket.ticket_key} />
@@ -575,7 +586,12 @@ export default function EmailQueuePage() {
                             <Button
                               variant="default"
                               size="sm"
-                              onClick={() => setReplyingTo(ticket.ticket_key)}
+                              onClick={() => {
+                                setReplyingTo(ticket.ticket_key);
+                                if (!expandedTickets.has(ticket.ticket_key)) {
+                                  setExpandedTickets(prev => new Set([...prev, ticket.ticket_key]));
+                                }
+                              }}
                               disabled={replyingTo === ticket.ticket_key}
                               className="gap-1"
                             >
@@ -623,6 +639,7 @@ export default function EmailQueuePage() {
                           originalSubject={ticket.subject || ''}
                           threadId={ticket.gmail_thread_id}
                           isMassEmailThread={ticket.is_mass_email_thread}
+                          existingCCs={threadCCs[ticket.ticket_key] || []}
                           onSent={() => {
                             setReplyingTo(null);
                             fetchTickets();

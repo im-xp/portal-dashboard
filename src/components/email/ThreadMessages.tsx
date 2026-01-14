@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { Loader2, Mail, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface ThreadMessage {
+export interface ThreadMessage {
   gmail_message_id: string;
   gmail_thread_id: string;
   from_email: string;
   to_emails: string[];
+  cc_emails: string[];
   subject: string | null;
   body: string | null;
   snippet: string | null;
@@ -18,9 +19,10 @@ interface ThreadMessage {
 
 interface ThreadMessagesProps {
   ticketKey: string;
+  onThreadLoaded?: (messages: ThreadMessage[]) => void;
 }
 
-export function ThreadMessages({ ticketKey }: ThreadMessagesProps) {
+export function ThreadMessages({ ticketKey, onThreadLoaded }: ThreadMessagesProps) {
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,7 +31,9 @@ export function ThreadMessages({ ticketKey }: ThreadMessagesProps) {
       try {
         const response = await fetch(`/api/email/thread?ticket_key=${ticketKey}`);
         const data = await response.json();
-        setMessages(data.messages || []);
+        const msgs = data.messages || [];
+        setMessages(msgs);
+        onThreadLoaded?.(msgs);
       } catch (error) {
         console.error('Failed to fetch thread messages:', error);
       } finally {
@@ -37,7 +41,7 @@ export function ThreadMessages({ ticketKey }: ThreadMessagesProps) {
       }
     };
     loadMessages();
-  }, [ticketKey]);
+  }, [ticketKey, onThreadLoaded]);
 
   const formatTime = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-US', {

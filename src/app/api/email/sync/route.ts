@@ -83,8 +83,18 @@ async function runSync() {
       return tsA - tsB;
     });
 
-    // Process messages in chronological order
-    for (const message of fullMessages) {
+    // Split messages by direction - process inbounds first to ensure tickets exist
+    const inboundMessages = fullMessages.filter(m => {
+      const from = parseEmailAddress(getHeader(m, 'From'));
+      return from && !isInternalSender(from);
+    });
+    const outboundMessages = fullMessages.filter(m => {
+      const from = parseEmailAddress(getHeader(m, 'From'));
+      return from && isInternalSender(from);
+    });
+
+    // Process inbound messages first (creates tickets)
+    for (const message of inboundMessages) {
       try {
         stats.messagesProcessed++;
 
@@ -378,6 +388,137 @@ async function runSync() {
                 .update({ last_outbound_ts: internalTs })
                 .eq('ticket_key', currentTicket.ticket_key);
             }
+          }
+        }
+      } catch (msgError) {
+        stats.errors.push(`Error processing ${message.id}: ${String(msgError)}`);
+      }
+    }
+
+    // Process outbound messages second (updates tickets)
+    for (const message of outboundMessages) {
+      try {
+        stats.messagesProcessed++;
+
+        const fromHeader = getHeader(message, 'From');
+        const toHeader = getHeader(message, 'To');
+        const ccHeader = getHeader(message, 'Cc');
+        const subject = getHeader(message, 'Subject');
+        const messageIdHeader = getHeader(message, 'Message-ID');
+
+        const fromEmail = parseEmailAddress(fromHeader);
+        if (!fromEmail) {
+          stats.errors.push(`No from email for message ${message.id}`);
+          continue;
+        }
+
+        const toEmails = parseEmailAddresses(toHeader);
+        const ccEmails = parseEmailAddresses(ccHeader);
+        const isNoise = isNoiseMessage(message);
+        const internalTs = message.internalDate
+          ? new Date(parseInt(message.internalDate)).toISOString()
+          : new Date().toISOString();
+
+        const strippedBody = message.body ? stripQuotedContent(message.body) : null;
+
+        const { error: insertError } = await supabase
+          .from('email_messages')
+          .insert({
+            gmail_message_id: message.id,
+            gmail_thread_id: message.threadId,
+            from_email: fromEmail,
+            to_emails: toEmails,
+            cc_emails: ccEmails,
+            subject,
+            snippet: message.snippet,
+            body: strippedBody,
+            internal_ts: internalTs,
+            direction: 'outbound',
+            is_noise: isNoise,
+            message_id: messageIdHeader,
+          });
+
+        if (insertError) {
+          stats.errors.push(`Insert error for ${message.id}: ${insertError.message}`);
+          continue;
+        }
+
+        stats.messagesInserted++;
+
+        if (isNoise) continue;
+
+        // Outbound: update tickets where customer was a recipient
+        const outboundRecipients = new Set([
+          ...toEmails.map(e => e.toLowerCase()),
+          ...ccEmails.map(e => e.toLowerCase()),
+        ]);
+
+        const { data: threadTickets } = await supabase
+          .from('email_tickets')
+          .select('ticket_key, customer_email, claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
+          .eq('gmail_thread_id', message.threadId);
+
+        const { data: mappedTickets } = await supabase
+          .from('thread_ticket_mapping')
+          .select('ticket_key')
+          .eq('gmail_thread_id', message.threadId);
+
+        const mappedTicketKeys = mappedTickets?.map(m => m.ticket_key) || [];
+
+        let additionalTickets: typeof threadTickets = [];
+        if (mappedTicketKeys.length > 0) {
+          const { data: mapped } = await supabase
+            .from('email_tickets')
+            .select('ticket_key, customer_email, claimed_by, responded_by, last_inbound_ts, last_outbound_ts')
+            .in('ticket_key', mappedTicketKeys);
+          additionalTickets = mapped || [];
+        }
+
+        const allTickets = [...(threadTickets || []), ...additionalTickets];
+        const seenKeys = new Set<string>();
+        const uniqueTickets = allTickets.filter(t => {
+          if (seenKeys.has(t.ticket_key)) return false;
+          seenKeys.add(t.ticket_key);
+          return true;
+        });
+
+        const outboundTs = new Date(internalTs);
+
+        for (const currentTicket of uniqueTickets) {
+          if (!outboundRecipients.has(currentTicket.customer_email.toLowerCase())) continue;
+
+          const lastInboundTs = currentTicket.last_inbound_ts ? new Date(currentTicket.last_inbound_ts) : null;
+          const lastOutboundTs = currentTicket.last_outbound_ts ? new Date(currentTicket.last_outbound_ts) : null;
+
+          if (lastOutboundTs && outboundTs <= lastOutboundTs) continue;
+
+          const isResponseToCustomer = lastInboundTs && outboundTs > lastInboundTs;
+
+          if (isResponseToCustomer) {
+            const responder = currentTicket.claimed_by || currentTicket.responded_by || 'team';
+
+            const { error: updateError } = await supabase
+              .from('email_tickets')
+              .update({
+                last_outbound_ts: internalTs,
+                responded_by: responder !== 'team' ? responder : null,
+                responded_at: internalTs,
+                status: 'awaiting_customer_response',
+              })
+              .eq('ticket_key', currentTicket.ticket_key);
+
+            if (!updateError) {
+              stats.ticketsUpdated++;
+              await logActivity(currentTicket.ticket_key, 'responded', responder, {
+                detected_from: 'gmail_sync',
+                message_ts: internalTs
+              });
+            }
+          } else {
+            await supabase
+              .from('email_tickets')
+              .update({ last_outbound_ts: internalTs })
+              .eq('ticket_key', currentTicket.ticket_key);
           }
         }
       } catch (msgError) {

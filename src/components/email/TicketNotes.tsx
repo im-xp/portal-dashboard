@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, MessageSquare, Send } from 'lucide-react';
+import { Loader2, MessageSquare, Send, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Note {
@@ -23,6 +23,7 @@ export function TicketNotes({ ticketKey, currentUser }: TicketNotesProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [newNote, setNewNote] = useState('');
+  const [collapsed, setCollapsed] = useState(true);
 
   const fetchNotes = useCallback(async () => {
     try {
@@ -85,58 +86,74 @@ export function TicketNotes({ ticketKey, currentUser }: TicketNotesProps) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-zinc-700">
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => setCollapsed(!collapsed)}
+        className="flex items-center gap-2 text-sm font-medium text-zinc-700 hover:text-zinc-900 w-full"
+      >
+        {collapsed ? (
+          <ChevronRight className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
         <MessageSquare className="h-4 w-4" />
         Internal Notes
-      </div>
+        {notes.length > 0 && (
+          <span className="text-xs text-zinc-400 font-normal">({notes.length})</span>
+        )}
+      </button>
 
-      {notes.length > 0 && (
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {notes.map((note) => (
-            <div
-              key={note.id}
-              className={cn(
-                "p-2 rounded-md text-sm",
-                note.author === currentUser
-                  ? "bg-blue-50 border border-blue-100"
-                  : "bg-zinc-50 border border-zinc-100"
-              )}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-medium text-zinc-700">
-                  {note.author.split('@')[0]}
-                </span>
-                <span className="text-xs text-zinc-400">
-                  {formatTime(note.created_at)}
-                </span>
-              </div>
-              <p className="text-zinc-600 whitespace-pre-wrap">{note.content}</p>
+      {!collapsed && (
+        <>
+          {notes.length > 0 && (
+            <div className="space-y-2 max-h-48 overflow-y-auto pl-6">
+              {notes.map((note) => (
+                <div
+                  key={note.id}
+                  className={cn(
+                    "p-2 rounded-md text-sm",
+                    note.author === currentUser
+                      ? "bg-blue-50 border border-blue-100"
+                      : "bg-zinc-50 border border-zinc-100"
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-zinc-700">
+                      {note.author.split('@')[0]}
+                    </span>
+                    <span className="text-xs text-zinc-400">
+                      {formatTime(note.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-zinc-600 whitespace-pre-wrap">{note.content}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          value={newNote}
-          onChange={(e) => setNewNote(e.target.value)}
-          placeholder="Add a note for the team..."
-          className="flex-1 text-sm border rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <Button
-          type="submit"
-          size="sm"
-          disabled={!newNote.trim() || submitting}
-        >
-          {submitting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
           )}
-        </Button>
-      </form>
+
+          <form onSubmit={handleSubmit} className="flex gap-2 pl-6">
+            <input
+              type="text"
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              placeholder="Add a note for the team..."
+              className="flex-1 text-sm border rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!newNote.trim() || submitting}
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </form>
+        </>
+      )}
     </div>
   );
 }

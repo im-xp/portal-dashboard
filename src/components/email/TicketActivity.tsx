@@ -9,7 +9,9 @@ import {
   RotateCcw,
   MessageSquare,
   Plus,
-  History
+  History,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -38,6 +40,7 @@ const ACTION_CONFIG: Record<Activity['action'], { icon: typeof UserPlus; label: 
 export function TicketActivity({ ticketKey }: TicketActivityProps) {
   const [activity, setActivity] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(true);
 
   useEffect(() => {
     const loadActivity = async () => {
@@ -79,54 +82,64 @@ export function TicketActivity({ ticketKey }: TicketActivityProps) {
     );
   }
 
-  if (activity.length === 0) {
-    return (
-      <div className="text-sm text-zinc-400 py-2">
-        No activity recorded yet
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-zinc-700">
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => setCollapsed(!collapsed)}
+        className="flex items-center gap-2 text-sm font-medium text-zinc-700 hover:text-zinc-900 w-full"
+      >
+        {collapsed ? (
+          <ChevronRight className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
         <History className="h-4 w-4" />
-        Activity Timeline
-      </div>
+        Activity
+        {activity.length > 0 && (
+          <span className="text-xs text-zinc-400 font-normal">({activity.length})</span>
+        )}
+      </button>
 
-      <div className="space-y-1 max-h-48 overflow-y-auto">
-        {activity.map((item, index) => {
-          const config = ACTION_CONFIG[item.action];
-          const Icon = config.icon;
+      {!collapsed && (
+        <div className="space-y-1 max-h-48 overflow-y-auto pl-6">
+          {activity.length === 0 ? (
+            <p className="text-sm text-zinc-400 py-2">No activity recorded yet</p>
+          ) : (
+            activity.map((item, index) => {
+              const config = ACTION_CONFIG[item.action];
+              const Icon = config.icon;
 
-          return (
-            <div
-              key={item.id}
-              className={cn(
-                "flex items-start gap-2 py-1.5",
-                index !== activity.length - 1 && "border-b border-zinc-100"
-              )}
-            >
-              <Icon className={cn("h-4 w-4 mt-0.5 flex-shrink-0", config.color)} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-zinc-600">
-                  <span className={cn("font-medium", config.color)}>
-                    {config.label}
-                  </span>
-                  {item.actor && (
-                    <span className="text-zinc-700">
-                      {' '}{formatActor(item.actor, item.action)}
-                    </span>
+              return (
+                <div
+                  key={item.id}
+                  className={cn(
+                    "flex items-start gap-2 py-1.5",
+                    index !== activity.length - 1 && "border-b border-zinc-100"
                   )}
-                </p>
-                <p className="text-xs text-zinc-400">
-                  {formatTime(item.created_at)}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                >
+                  <Icon className={cn("h-4 w-4 mt-0.5 flex-shrink-0", config.color)} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-zinc-600">
+                      <span className={cn("font-medium", config.color)}>
+                        {config.label}
+                      </span>
+                      {item.actor && (
+                        <span className="text-zinc-700">
+                          {' '}{formatActor(item.actor, item.action)}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      {formatTime(item.created_at)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 }

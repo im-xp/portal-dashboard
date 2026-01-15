@@ -1,3 +1,4 @@
+import { createClient, type RedisClientType } from 'redis';
 import type {
   NocoDBResponse,
   Application,
@@ -48,38 +49,60 @@ const TABLES = {
 // Simple delay helper
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Simple in-memory cache with TTL (persists across hot reloads in dev)
-interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-}
+// Redis cache with TTL (shared across all serverless instances)
+const CACHE_TTL = 120; // 2 minutes in seconds
+const REDIS_URL = process.env.REDIS_URL;
 
-declare global {
-  // eslint-disable-next-line no-var
-  var nocoDBCache: Map<string, CacheEntry<unknown>> | undefined;
-}
+let redisClient: RedisClientType | null = null;
 
-const cache = globalThis.nocoDBCache ?? new Map<string, CacheEntry<unknown>>();
-globalThis.nocoDBCache = cache;
-
-const CACHE_TTL = 120 * 1000; // 2 minutes
-
-function getCached<T>(key: string): T | null {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() - entry.timestamp > CACHE_TTL) {
-    cache.delete(key);
+async function getRedis(): Promise<RedisClientType | null> {
+  if (!REDIS_URL) {
+    console.warn('REDIS_URL not set, caching disabled');
     return null;
   }
-  return entry.data as T;
+
+  if (!redisClient) {
+    redisClient = createClient({ url: REDIS_URL });
+    redisClient.on('error', (err) => console.error('Redis error:', err));
+  }
+
+  if (!redisClient.isOpen) {
+    await redisClient.connect();
+  }
+
+  return redisClient;
 }
 
-function setCache<T>(key: string, data: T): void {
-  cache.set(key, { data, timestamp: Date.now() });
+async function getCached<T>(key: string): Promise<T | null> {
+  try {
+    const redis = await getRedis();
+    if (!redis) return null;
+    const data = await redis.get(key);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error('Cache get failed:', e);
+    return null;
+  }
 }
 
-export function clearCache(): void {
-  cache.clear();
+async function setCache<T>(key: string, data: T): Promise<void> {
+  try {
+    const redis = await getRedis();
+    if (!redis) return;
+    await redis.setEx(key, CACHE_TTL, JSON.stringify(data));
+  } catch (e) {
+    console.error('Cache set failed:', e);
+  }
+}
+
+export async function clearCache(): Promise<void> {
+  try {
+    const redis = await getRedis();
+    if (!redis) return;
+    await redis.del(['dashboard-data', 'popup-cities']);
+  } catch (e) {
+    console.error('Cache clear failed:', e);
+  }
 }
 
 async function nocoFetch<T>(endpoint: string, retries = 5): Promise<T> {
@@ -163,7 +186,7 @@ export async function getPaymentProducts(): Promise<PaymentProduct[]> {
 
 export async function getPopupCities(): Promise<PopupCity[]> {
   const cacheKey = 'popup-cities';
-  const cached = getCached<PopupCity[]>(cacheKey);
+  const cached = await getCached<PopupCity[]>(cacheKey);
   if (cached) return cached;
 
   // Derive popup cities from applications data (they have linked popups)
@@ -181,7 +204,7 @@ export async function getPopupCities(): Promise<PopupCity[]> {
   }
 
   const cities = Array.from(citiesMap.values());
-  setCache(cacheKey, cities);
+  await setCache(cacheKey, cities);
   return cities;
 }
 
@@ -190,7 +213,7 @@ export async function getPopupCities(): Promise<PopupCity[]> {
 export async function getDashboardData(): Promise<DashboardData> {
   // Check cache first
   const cacheKey = 'dashboard-data';
-  const cached = getCached<DashboardData>(cacheKey);
+  const cached = await getCached<DashboardData>(cacheKey);
   if (cached) {
     console.log('Using cached dashboard data');
     return cached;
@@ -427,8 +450,8 @@ export async function getDashboardData(): Promise<DashboardData> {
   };
 
   // Cache the result
-  setCache(cacheKey, result);
+  await setCache(cacheKey, result);
   console.log('Dashboard data cached');
-  
+
   return result;
 }

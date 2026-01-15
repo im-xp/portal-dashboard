@@ -136,7 +136,7 @@ export function ThreadMessages({ ticketKey, onThreadLoaded }: ThreadMessagesProp
         Conversation ({messages.length} messages)
       </div>
 
-      <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+      <div className="space-y-3 max-h-64 md:max-h-96 overflow-y-auto pr-2">
         {messages.map((msg) => {
           const isInbound = msg.direction === 'inbound';
 

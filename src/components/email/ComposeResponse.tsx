@@ -219,12 +219,12 @@ export function ComposeResponse({
         </div>
       )}
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
         <Button
           onClick={() => handleSend(false)}
           disabled={!body.trim() || sending || (isMassEmailThread && !subjectChanged)}
           variant="outline"
-          className="gap-2"
+          className="w-full sm:w-auto gap-2"
         >
           {sending ? (
             <>
@@ -241,7 +241,7 @@ export function ComposeResponse({
         <Button
           onClick={() => handleSend(true)}
           disabled={!body.trim() || sending || (isMassEmailThread && !subjectChanged)}
-          className="gap-2"
+          className="w-full sm:w-auto gap-2"
         >
           {sending ? (
             <>

@@ -361,48 +361,48 @@ export default function ProductsPage() {
                 <CardContent className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow>
+                      <TableRow className="text-xs md:text-sm">
                         <TableHead>Product</TableHead>
-                        <TableHead>Price</TableHead>
+                        <TableHead className="hidden md:table-cell">Price</TableHead>
                         <TableHead>Category</TableHead>
-                        <TableHead className="text-center">Inventory</TableHead>
-                        <TableHead className="text-right text-emerald-700">Sold</TableHead>
-                        <TableHead className="text-right text-emerald-700">Revenue</TableHead>
+                        <TableHead className="text-center">Inv</TableHead>
+                        <TableHead className="hidden md:table-cell text-right text-emerald-700">Sold</TableHead>
+                        <TableHead className="text-right text-emerald-700">Rev</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {productsWithSales.map((product) => (
                         <TableRow key={product.id}>
-                          <TableCell>
+                          <TableCell className="max-w-[120px] md:max-w-none">
                             <div>
-                              <p className="font-medium">{product.name}</p>
+                              <p className="font-medium text-sm md:text-base truncate md:whitespace-normal">{product.name}</p>
                               {product.description && (
-                                <p className="text-xs text-zinc-500 truncate max-w-xs">
+                                <p className="hidden md:block text-xs text-zinc-500 truncate max-w-xs">
                                   {product.description}
                                 </p>
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>{formatCurrency(product.price)}</TableCell>
+                          <TableCell className="hidden md:table-cell text-xs md:text-sm">{formatCurrency(product.price)}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="capitalize">
+                            <Badge variant="outline" className="capitalize text-[10px] md:text-xs">
                               {product.category || 'other'}
                             </Badge>
                           </TableCell>
                           <TableCell>
                             {product.max_inventory !== null ? (
-                              <div className="min-w-[80px]">
-                                <div className="flex items-center justify-between text-sm mb-1">
+                              <div className="md:min-w-[80px]">
+                                <div className="flex items-center justify-between text-xs md:text-sm md:mb-1">
                                   <span className="font-medium">
-                                    {product.current_sold || 0} / {product.max_inventory}
+                                    {product.current_sold || 0}/{product.max_inventory}
                                   </span>
                                   {(product.current_sold || 0) >= product.max_inventory && (
-                                    <Badge variant="destructive" className="text-[10px] px-1 py-0 ml-1">
+                                    <Badge variant="destructive" className="hidden md:inline-flex text-[10px] px-1 py-0 ml-1">
                                       SOLD OUT
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                                <div className="hidden md:block h-1.5 rounded-full bg-zinc-100 overflow-hidden">
                                   <div
                                     className={cn(
                                       'h-full rounded-full transition-all',
@@ -417,17 +417,17 @@ export default function ProductsPage() {
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-zinc-400 text-sm">∞</span>
+                              <span className="text-zinc-400 text-xs md:text-sm">∞</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="hidden md:table-cell text-right text-xs md:text-sm">
                             {product.sales.soldQuantity > 0 ? (
                               <span className="font-medium text-emerald-600">{product.sales.soldQuantity}</span>
                             ) : (
                               <span className="text-zinc-300">0</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right text-xs md:text-sm">
                             {(product.sales.approvedRevenue || 0) > 0 ? (
                               <span className="font-semibold text-emerald-600">
                                 {formatCurrency(product.sales.approvedRevenue)}

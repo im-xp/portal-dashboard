@@ -10,6 +10,7 @@ import {
   Users,
   Package,
   FileText,
+  Mail,
   RefreshCw,
   Menu,
   X
@@ -21,6 +22,7 @@ const navigation = [
   { name: 'People', href: '/people', icon: Users },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Applications', href: '/applications', icon: FileText },
+  { name: 'Email', href: '/email-queue', icon: Mail },
 ];
 
 export function MobileNav() {

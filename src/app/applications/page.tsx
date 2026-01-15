@@ -200,15 +200,15 @@ export default function ApplicationsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <Table className="min-w-[700px]">
+            <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Applicant</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead className="hidden md:table-cell">Email</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Attendees</TableHead>
-                  <TableHead>Products</TableHead>
-                  <TableHead>Submitted</TableHead>
+                  <TableHead className="hidden md:table-cell">Products</TableHead>
+                  <TableHead className="hidden md:table-cell">Submitted</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -221,32 +221,32 @@ export default function ApplicationsPage() {
 
                   return (
                     <TableRow key={app.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 flex items-center justify-center text-sm font-medium">
+                      <TableCell className="max-w-[140px] md:max-w-none">
+                        <div className="flex items-center gap-2 md:gap-3">
+                          <div className="hidden md:flex h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 items-center justify-center text-sm font-medium">
                             {app.first_name[0]}{app.last_name[0]}
                           </div>
-                          <div>
-                            <p className="font-medium">{app.first_name} {app.last_name}</p>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm md:text-base truncate">{app.first_name} {app.last_name}</p>
                             {app.telegram && (
-                              <p className="text-xs text-zinc-500">@{app.telegram}</p>
+                              <p className="hidden md:block text-xs text-zinc-500">@{app.telegram}</p>
                             )}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-zinc-500">{app.email}</TableCell>
+                      <TableCell className="hidden md:table-cell text-zinc-500">{app.email}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={`capitalize ${getStatusColor(app.status)}`}>
+                        <Badge variant="outline" className={`capitalize text-[10px] md:text-xs ${getStatusColor(app.status)}`}>
                           {app.status}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-4 w-4 text-zinc-400" />
+                        <div className="flex items-center gap-1 text-sm">
+                          <Users className="h-3 w-3 md:h-4 md:w-4 text-zinc-400" />
                           <span>{app.attendeesList.length}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         {hasPaid ? (
                           <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
                             {totalProducts} item{totalProducts !== 1 ? 's' : ''}
@@ -255,7 +255,7 @@ export default function ApplicationsPage() {
                           <span className="text-zinc-400">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-zinc-500 text-sm">
+                      <TableCell className="hidden md:table-cell text-zinc-500 text-sm">
                         {app.submitted_at
                           ? formatDistanceToNow(new Date(app.submitted_at), { addSuffix: true })
                           : 'Not submitted'}

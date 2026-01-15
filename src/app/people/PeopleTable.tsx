@@ -138,15 +138,15 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
           {/* Table - horizontal scroll on mobile */}
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
-              <Table className="min-w-[600px]">
+              <Table>
                 <TableHeader className="sticky top-0 bg-white">
-                  <TableRow>
+                  <TableRow className="text-xs md:text-sm">
                     <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
+                    <TableHead className="hidden md:table-cell">Email</TableHead>
                     <TableHead>Journey</TableHead>
                     <TableHead>Pass</TableHead>
                     <TableHead>Lodging</TableHead>
-                    <TableHead>Check-in Code</TableHead>
+                    <TableHead className="hidden md:table-cell">Check-in Code</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -160,33 +160,33 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
                         className="cursor-pointer hover:bg-zinc-50"
                         onClick={() => setSelectedPerson(person)}
                       >
-                        <TableCell className="font-medium">{person.name}</TableCell>
-                        <TableCell className="text-zinc-500">{person.email}</TableCell>
+                        <TableCell className="font-medium text-sm md:text-base max-w-[100px] md:max-w-none truncate">{person.name}</TableCell>
+                        <TableCell className="hidden md:table-cell text-zinc-500">{person.email}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={cn('gap-1', config.className)}>
+                          <Badge variant="outline" className={cn('gap-1 text-[10px] md:text-xs', config.className)}>
                             <Icon className="h-3 w-3" />
-                            {config.label}
+                            <span className="hidden md:inline">{config.label}</span>
                           </Badge>
                         </TableCell>
                         <TableCell>
                           {person.hasPass ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5 text-emerald-500" />
                           ) : person.inCartProducts.some(p => p.category === 'month') ? (
-                            <ShoppingCart className="h-5 w-5 text-amber-500" />
+                            <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 text-amber-500" />
                           ) : (
                             <span className="text-zinc-300">—</span>
                           )}
                         </TableCell>
                         <TableCell>
                           {person.hasLodging ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5 text-emerald-500" />
                           ) : person.inCartProducts.some(p => p.category === 'lodging') ? (
-                            <ShoppingCart className="h-5 w-5 text-amber-500" />
+                            <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 text-amber-500" />
                           ) : (
                             <span className="text-zinc-300">—</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           <code className="text-xs bg-zinc-100 px-2 py-1 rounded">
                             {person.check_in_code || '—'}
                           </code>

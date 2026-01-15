@@ -86,17 +86,14 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const enrichedTickets = (tickets as EmailTicket[]).map(ticket => {
       const lastInbound = ticket.last_inbound_ts ? new Date(ticket.last_inbound_ts) : null;
-      const claimedAt = ticket.claimed_at ? new Date(ticket.claimed_at) : null;
-      
       // Calculate age in hours
       const ageHours = lastInbound 
         ? Math.floor((now.getTime() - lastInbound.getTime()) / (1000 * 60 * 60))
         : null;
 
-      // Check if claim is stale (> 24 hours AND still needs response)
-      // If it's been responded to, it's not stale even if old
-      const isStale = ticket.needs_response && claimedAt 
-        ? (now.getTime() - claimedAt.getTime()) > 24 * 60 * 60 * 1000
+      // Stale if needs response and last customer email was >24h ago
+      const isStale = ticket.needs_response && lastInbound
+        ? (now.getTime() - lastInbound.getTime()) > 24 * 60 * 60 * 1000
         : false;
 
       return {

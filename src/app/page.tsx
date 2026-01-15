@@ -6,7 +6,7 @@ import { MetricCard } from '@/components/dashboard/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, UserCheck, CreditCard, DollarSign, Package, Clock, Percent, AlertCircle, RefreshCw, Ticket, ChevronDown } from 'lucide-react';
+import { Users, UserCheck, CreditCard, DollarSign, Clock, Percent, AlertCircle, RefreshCw, Ticket, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getFeverMetrics, getFeverSyncState } from '@/lib/fever-client';
 import type { DashboardData, FeverMetrics, FeverSyncState } from '@/lib/types';
@@ -270,78 +270,6 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Fever Sales by Plan */}
-          {feverMetrics && Object.keys(feverMetrics.revenueByPlan).length > 0 && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Fever Sales by Plan</CardTitle>
-                <Ticket className="h-5 w-5 text-purple-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {Object.entries(feverMetrics.revenueByPlan)
-                    .sort(([, a], [, b]) => b.revenue - a.revenue)
-                    .slice(0, 5)
-                    .map(([planId, data]) => (
-                      <div key={planId} className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{data.planName}</p>
-                          <p className="text-xs text-zinc-500">{data.count} tickets</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-purple-600">{formatCurrency(data.revenue)}</p>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Top Products by Revenue */}
-          {metrics && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Product Sales (Actual Revenue)</CardTitle>
-                <Package className="h-5 w-5 text-zinc-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {metrics.productSales
-                    .filter(ps => ps.actualRevenue > 0)
-                    .sort((a, b) => b.actualRevenue - a.actualRevenue)
-                    .slice(0, 5)
-                    .map(({ product, quantity, actualRevenue, hasPendingPayments, hasApprovedPayments }) => (
-                      <div key={product.id} className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{product.name}</p>
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs text-zinc-500">{quantity} assigned</p>
-                            {hasPendingPayments && !hasApprovedPayments && (
-                              <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
-                                Pending
-                              </Badge>
-                            )}
-                            {hasApprovedPayments && (
-                              <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
-                                Paid
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold">{formatCurrency(actualRevenue)}</p>
-                          <p className="text-xs text-zinc-500">at purchase price</p>
-                        </div>
-                      </div>
-                    ))}
-                  {metrics.productSales.filter(ps => ps.actualRevenue > 0).length === 0 && (
-                    <p className="text-sm text-zinc-500 text-center py-4">No paid products yet</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Payments with Discounts */}

@@ -19,14 +19,18 @@ interface SlackBlock {
   }>;
 }
 
-export async function sendSlackMessage(message: SlackMessage): Promise<boolean> {
-  if (!SLACK_WEBHOOK_URL) {
+export async function sendSlackMessage(
+  message: SlackMessage,
+  webhookUrl?: string
+): Promise<boolean> {
+  const url = webhookUrl || SLACK_WEBHOOK_URL;
+  if (!url) {
     console.warn('[Slack] No webhook URL configured');
     return false;
   }
 
   try {
-    const response = await fetch(SLACK_WEBHOOK_URL, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(message),
@@ -112,6 +116,61 @@ export function formatStaleAlert(ticket: {
             '',
             `<${ticket.dashboardUrl}|View in Dashboard>`,
           ].join('\n'),
+        },
+      },
+    ],
+  };
+}
+
+export function formatFeverOrderNotification(order: {
+  orderId: string;
+  buyerEmail: string;
+  buyerName: string | null;
+  planName: string;
+  itemCount: number;
+  totalPrice: number;
+  currency: string;
+  sessionName: string | null;
+  sessionStart: Date | null;
+  dashboardUrl: string;
+}): SlackMessage {
+  const buyerDisplay = order.buyerName || order.buyerEmail;
+  const priceDisplay = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: order.currency,
+  }).format(order.totalPrice);
+
+  const sessionDisplay = order.sessionStart
+    ? new Intl.DateTimeFormat('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(order.sessionStart)
+    : null;
+
+  const lines = [
+    ':ticket: *New Fever Order*',
+    '',
+    `*${buyerDisplay}*`,
+    `${order.planName}`,
+    `${order.itemCount} ticket${order.itemCount !== 1 ? 's' : ''} • ${priceDisplay}`,
+  ];
+
+  if (order.sessionName && sessionDisplay) {
+    lines.push(`Session: ${order.sessionName} (${sessionDisplay})`);
+  } else if (sessionDisplay) {
+    lines.push(`Session: ${sessionDisplay}`);
+  }
+
+  lines.push('', `<${order.dashboardUrl}|View Orders>`);
+
+  return {
+    text: `New Fever order: ${buyerDisplay} - ${order.planName}`,
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: lines.join('\n'),
         },
       },
     ],

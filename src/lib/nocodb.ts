@@ -14,6 +14,7 @@ import type {
   ProductSaleRecord,
   JourneyStage,
   DashboardData,
+  PopupCity,
 } from './types';
 
 // Helper to clean env vars (strip whitespace/newlines that can corrupt values)
@@ -158,6 +159,30 @@ export async function getPaymentProducts(): Promise<PaymentProduct[]> {
     `/tables/${TABLES.paymentProducts}/records?limit=500`
   );
   return response.list;
+}
+
+export async function getPopupCities(): Promise<PopupCity[]> {
+  const cacheKey = 'popup-cities';
+  const cached = getCached<PopupCity[]>(cacheKey);
+  if (cached) return cached;
+
+  // Derive popup cities from applications data (they have linked popups)
+  const applications = await getApplications();
+  const citiesMap = new Map<number, PopupCity>();
+
+  for (const app of applications) {
+    if (app.popups && app.popup_city_id && !citiesMap.has(app.popup_city_id)) {
+      citiesMap.set(app.popup_city_id, {
+        id: app.popups.id,
+        name: app.popups.name,
+        slug: app.popups.name.toLowerCase().replace(/\s+/g, '-'),
+      });
+    }
+  }
+
+  const cities = Array.from(citiesMap.values());
+  setCache(cacheKey, cities);
+  return cities;
 }
 
 // Dashboard data fetcher (aggregates everything)

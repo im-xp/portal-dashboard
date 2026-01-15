@@ -224,7 +224,7 @@ export default function EmailQueuePage() {
         {/* Status Bar */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
           <div className="flex items-center gap-4">
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-1.5 md:gap-2 flex-wrap">
               {(['unclaimed', 'followups', 'awaiting_customer_response', 'claimed', 'resolved', 'all'] as const).map((f) => (
                 <Button
                   key={f}
@@ -232,27 +232,37 @@ export default function EmailQueuePage() {
                   size="sm"
                   onClick={() => setFilter(f)}
                   className={cn(
-                    "capitalize",
+                    "capitalize text-xs md:text-sm px-2 md:px-3",
                     f === 'followups' && "bg-orange-100 hover:bg-orange-200 text-orange-700 border-orange-200"
                   )}
                 >
-                  {f === 'awaiting_customer_response' ? 'Awaiting Customer Reply' :
-                   f === 'followups' ? 'Awaiting Team Reply' :
-                   f === 'unclaimed' ? 'Unclaimed' :
-                   f.replace('_', ' ')}
+                  <span className="hidden md:inline">
+                    {f === 'awaiting_customer_response' ? 'Awaiting Customer' :
+                     f === 'followups' ? 'Awaiting Team' :
+                     f === 'unclaimed' ? 'Unclaimed' :
+                     f.replace('_', ' ')}
+                  </span>
+                  <span className="md:hidden">
+                    {f === 'awaiting_customer_response' ? 'Customer' :
+                     f === 'followups' ? 'Team' :
+                     f === 'unclaimed' ? 'New' :
+                     f === 'claimed' ? 'Claimed' :
+                     f === 'resolved' ? 'Done' : 'All'}
+                  </span>
                 </Button>
               ))}
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 flex-wrap">
             {syncStatus && (
-              <div className="text-sm text-zinc-500">
+              <div className="text-xs md:text-sm text-zinc-500">
                 {syncStatus.configured ? (
                   <>
-                    <span className="text-emerald-600">●</span> Gmail connected
+                    <span className="text-emerald-600">●</span> Gmail
+                    <span className="hidden md:inline"> connected</span>
                     {syncStatus.lastSyncAt && (
-                      <> • Last sync: {formatTime(syncStatus.lastSyncAt)}</>
+                      <span className="hidden md:inline"> • Last sync: {formatTime(syncStatus.lastSyncAt)}</span>
                     )}
                   </>
                 ) : (
@@ -267,15 +277,16 @@ export default function EmailQueuePage() {
               size="sm"
               onClick={handleSync}
               disabled={syncing || !syncStatus?.configured}
+              className="text-xs md:text-sm"
             >
-              <RefreshCw className={cn("h-4 w-4 mr-2", syncing && "animate-spin")} />
-              {syncing ? 'Syncing...' : 'Sync Now'}
+              <RefreshCw className={cn("h-4 w-4 mr-1 md:mr-2", syncing && "animate-spin")} />
+              {syncing ? 'Syncing...' : 'Sync'}
             </Button>
           </div>
         </div>
 
-        {/* Help Text */}
-        <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 p-4 space-y-2">
+        {/* Help Text - hidden on mobile */}
+        <div className="hidden md:block mb-6 rounded-lg bg-blue-50 border border-blue-200 p-4 space-y-2">
           <p className="text-sm text-blue-800">
             <strong>Workflow:</strong> Claim a ticket → Click <strong>Reply</strong> to compose your response →
             Send directly from this dashboard. Your reply will be sent from your Google account.
@@ -408,53 +419,57 @@ export default function EmailQueuePage() {
                   >
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium truncate">
+                        <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+                          <p className="text-sm font-medium truncate max-w-[180px] md:max-w-none">
                             {ticket.customer_email}
                           </p>
                           {ticket.is_followup && ticket.needs_response && (
-                            <Badge 
-                              variant="outline" 
-                              className="text-xs bg-orange-50 text-orange-700 border-orange-200"
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] md:text-xs bg-orange-50 text-orange-700 border-orange-200 px-1.5 md:px-2"
                             >
-                              <Reply className="h-3 w-3 mr-1" />
-                              Follow-up{ticket.response_count > 1 ? ` #${ticket.response_count}` : ''}
+                              <Reply className="h-3 w-3 mr-0.5 md:mr-1" />
+                              <span className="hidden md:inline">Follow-up</span>
+                              <span className="md:hidden">FU</span>
+                              {ticket.response_count > 1 ? ` #${ticket.response_count}` : ''}
                             </Badge>
                           )}
                           {ticket.is_stale && (
-                            <Badge variant="destructive" className="text-xs">
+                            <Badge variant="destructive" className="text-[10px] md:text-xs px-1.5 md:px-2">
                               Stale
                             </Badge>
                           )}
                           {ticket.status === 'awaiting_customer_response' && (
                             <Badge
                               variant="outline"
-                              className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200"
+                              className="text-[10px] md:text-xs bg-emerald-50 text-emerald-700 border-emerald-200 px-1.5 md:px-2"
                             >
-                              <MessageSquare className="h-3 w-3 mr-1" />
-                              Awaiting Customer Reply
+                              <MessageSquare className="h-3 w-3 mr-0.5 md:mr-1" />
+                              <span className="hidden md:inline">Awaiting Customer</span>
+                              <span className="md:hidden">Waiting</span>
                             </Badge>
                           )}
                           {ticket.status === 'resolved' && (
-                            <Badge 
-                              variant="outline" 
-                              className="text-xs bg-zinc-100 text-zinc-600"
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] md:text-xs bg-zinc-100 text-zinc-600 px-1.5 md:px-2"
                             >
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Resolved
+                              <CheckCircle className="h-3 w-3 mr-0.5 md:mr-1" />
+                              <span className="hidden md:inline">Resolved</span>
+                              <span className="md:hidden">Done</span>
                             </Badge>
                           )}
                           {ticket.claimed_by && (
-                            <Badge 
-                              variant="outline" 
+                            <Badge
+                              variant="outline"
                               className={cn(
-                                "text-xs",
-                                ticket.claimed_by === currentUser 
+                                "text-[10px] md:text-xs px-1.5 md:px-2",
+                                ticket.claimed_by === currentUser
                                   ? "bg-blue-100 text-blue-700 border-blue-200"
                                   : "bg-zinc-100 text-zinc-600"
                               )}
                             >
-                              {`Claimed: ${ticket.claimed_by?.split('@')[0]}`}
+                              {ticket.claimed_by?.split('@')[0]}
                             </Badge>
                           )}
                         </div>
@@ -507,51 +522,50 @@ export default function EmailQueuePage() {
                           </div>
                         )}
 
-                      <div className="flex items-center gap-4 mt-2 text-xs text-zinc-400">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-zinc-400">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {ticket.age_display} ago
+                          {ticket.age_display}
                         </span>
-                        <span>
-                          Customer: {formatTime(ticket.last_inbound_ts)}
+                        <span className="hidden md:inline">
+                          In: {formatTime(ticket.last_inbound_ts)}
                         </span>
                         {ticket.last_outbound_ts && (
-                          <span className="text-emerald-600">
-                            Team: {formatTime(ticket.last_outbound_ts)}
+                          <span className="text-emerald-600 hidden md:inline">
+                            Out: {formatTime(ticket.last_outbound_ts)}
                           </span>
                         )}
                         {ticket.responded_by && (
-                          <span className="text-zinc-500">
+                          <span className="text-zinc-500 hidden md:inline">
                             by {ticket.responded_by.split('@')[0]}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 md:ml-4">
+                    <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mt-2 md:mt-0 md:ml-4">
                       {/* Action buttons based on status */}
                       {ticket.status === 'resolved' ? (
-                        // Resolved tickets - option to reopen
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleClaim(ticket.ticket_key, 'reopen')}
                           disabled={claimingKey === ticket.ticket_key}
+                          className="text-xs md:text-sm h-7 md:h-8 px-2 md:px-3"
                         >
                           {claimingKey === ticket.ticket_key ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
                           ) : (
                             <>
-                              <RotateCcw className="h-4 w-4 mr-1" />
+                              <RotateCcw className="h-3 w-3 md:h-4 md:w-4 mr-1" />
                               Reopen
                             </>
                           )}
                         </Button>
                       ) : (
-                        // Active tickets - show claim/unclaim and reply buttons
                         <>
                           {ticket.status === 'awaiting_customer_response' ? (
-                            <span className="text-sm text-zinc-400 italic">Awaiting customer</span>
+                            <span className="text-xs md:text-sm text-zinc-400 italic">Awaiting</span>
                           ) : (
                             <>
                               {ticket.claimed_by === currentUser ? (
@@ -560,11 +574,12 @@ export default function EmailQueuePage() {
                                   size="sm"
                                   onClick={() => handleClaim(ticket.ticket_key, 'unclaim')}
                                   disabled={claimingKey === ticket.ticket_key}
+                                  className="text-xs md:text-sm h-7 md:h-8 px-2 md:px-3"
                                 >
                                   {claimingKey === ticket.ticket_key ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
                                   ) : (
-                                    'Unclaim'
+                                    'Drop'
                                   )}
                                 </Button>
                               ) : !ticket.claimed_by ? (
@@ -573,34 +588,37 @@ export default function EmailQueuePage() {
                                   size="sm"
                                   onClick={() => handleClaim(ticket.ticket_key, 'claim')}
                                   disabled={claimingKey === ticket.ticket_key}
+                                  className="text-xs md:text-sm h-7 md:h-8 px-2 md:px-3"
                                 >
                                   {claimingKey === ticket.ticket_key ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
                                   ) : (
                                     'Claim'
                                   )}
                                 </Button>
                               ) : null}
 
-                              {/* Mark as Replied - only available once claimed */}
                               {ticket.claimed_by && (
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleClaim(ticket.ticket_key, 'mark_responded')}
                                   disabled={claimingKey === ticket.ticket_key}
+                                  className="text-xs md:text-sm h-7 md:h-8 px-2 md:px-3"
                                 >
                                   {claimingKey === ticket.ticket_key ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
                                   ) : (
-                                    'Mark Replied'
+                                    <>
+                                      <span className="hidden md:inline">Mark Replied</span>
+                                      <span className="md:hidden">Done</span>
+                                    </>
                                   )}
                                 </Button>
                               )}
                             </>
                           )}
 
-                          {/* Reply from Dashboard - available to any team member once ticket is claimed */}
                           {ticket.claimed_by && (
                             <Button
                               variant="default"
@@ -612,25 +630,24 @@ export default function EmailQueuePage() {
                                 }
                               }}
                               disabled={replyingTo === ticket.ticket_key}
-                              className="gap-1"
+                              className="gap-1 text-xs md:text-sm h-7 md:h-8 px-2 md:px-3"
                             >
-                              <Reply className="h-4 w-4" />
+                              <Reply className="h-3 w-3 md:h-4 md:w-4" />
                               Reply
                             </Button>
                           )}
                         </>
                       )}
 
-                      {/* Open in Gmail - search by sender email */}
                       <a
                         href={`https://mail.google.com/mail/u/0/#search/from:${encodeURIComponent(ticket.customer_email)}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3"
+                        className="inline-flex items-center justify-center rounded-md text-xs md:text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-7 md:h-8 px-2 md:px-3"
                         title={`Search: from:${ticket.customer_email}`}
                       >
-                        <ExternalLink className="h-4 w-4 mr-1" />
-                        Gmail
+                        <ExternalLink className="h-3 w-3 md:h-4 md:w-4 md:mr-1" />
+                        <span className="hidden md:inline">Gmail</span>
                       </a>
                     </div>
                     </div>

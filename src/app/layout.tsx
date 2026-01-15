@@ -39,7 +39,7 @@ export default function RootLayout({
           <div className="flex min-h-screen">
             <Sidebar />
             <MobileNav />
-            <main className="flex-1 md:ml-64 bg-zinc-50 pt-14 pb-16 md:pt-0 md:pb-0">
+            <main className="flex-1 min-w-0 md:ml-64 bg-zinc-50 pt-14 pb-16 md:pt-0 md:pb-0">
               {children}
             </main>
           </div>

@@ -12,10 +12,25 @@ interface SlackBlock {
     text: string;
     emoji?: boolean;
   };
+  accessory?: {
+    type: string;
+    text?: {
+      type: string;
+      text: string;
+      emoji?: boolean;
+    };
+    url?: string;
+    action_id?: string;
+  };
   elements?: Array<{
     type: string;
-    text?: string;
+    text?: string | { type: string; text: string; emoji?: boolean };
     url?: string;
+    action_id?: string;
+  }>;
+  fields?: Array<{
+    type: string;
+    text: string;
   }>;
 }
 
@@ -49,42 +64,76 @@ export async function sendSlackMessage(
 }
 
 export function formatDigestMessage(stats: {
-  needsResponse: number;
-  stale: number;
-  unclaimed: number;
-  staleTickets: Array<{ customer_email: string; subject: string | null; age_display: string }>;
+  unclaimed: { total: number; stale: number };
+  awaitingTeam: { total: number; stale: number };
+  oldestStale: Array<{ customer_email: string; subject: string | null; age_display: string }>;
   dashboardUrl: string;
 }): SlackMessage {
-  const lines = [
-    ':mailbox_with_mail: *Email Queue Daily Digest*',
-    '',
-    `:red_circle: *${stats.needsResponse}* tickets need response`,
-    `:warning: *${stats.stale}* stale (>24h)`,
-    `:bust_in_silhouette: Unclaimed: *${stats.unclaimed}*`,
+  const totalStale = stats.unclaimed.stale + stats.awaitingTeam.stale;
+  const hasIssues = totalStale > 0;
+
+  const blocks: SlackBlock[] = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: hasIssues ? '📬 Email Queue Needs Attention' : '📬 Email Queue Status',
+        emoji: true,
+      },
+    },
+    {
+      type: 'section',
+      fields: [
+        {
+          type: 'mrkdwn',
+          text: `*Unclaimed*\n${stats.unclaimed.total} total${stats.unclaimed.stale > 0 ? ` · ⚠️ ${stats.unclaimed.stale} stale` : ''}`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*Awaiting Team Reply*\n${stats.awaitingTeam.total} total${stats.awaitingTeam.stale > 0 ? ` · ⚠️ ${stats.awaitingTeam.stale} stale` : ''}`,
+        },
+      ],
+    },
   ];
 
-  if (stats.staleTickets.length > 0) {
-    lines.push('', '*Top stale:*');
-    stats.staleTickets.slice(0, 3).forEach((ticket) => {
+  if (stats.oldestStale.length > 0) {
+    blocks.push({ type: 'divider' });
+
+    const staleList = stats.oldestStale.map((ticket) => {
       const subject = ticket.subject || '(No subject)';
-      const truncatedSubject = subject.length > 40 ? subject.slice(0, 40) + '...' : subject;
-      lines.push(`• ${ticket.customer_email} - "${truncatedSubject}" (${ticket.age_display})`);
+      const truncatedSubject = subject.length > 35 ? subject.slice(0, 35) + '…' : subject;
+      return `• *${ticket.customer_email}*\n   _${truncatedSubject}_ · ${ticket.age_display}`;
+    });
+
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Oldest stale:*\n${staleList.join('\n')}`,
+      },
     });
   }
 
-  lines.push('', `<${stats.dashboardUrl}|View Dashboard>`);
-
-  return {
-    text: `Email Queue: ${stats.needsResponse} need response, ${stats.stale} stale`,
-    blocks: [
+  blocks.push({ type: 'divider' });
+  blocks.push({
+    type: 'actions',
+    elements: [
       {
-        type: 'section',
+        type: 'button',
         text: {
-          type: 'mrkdwn',
-          text: lines.join('\n'),
+          type: 'plain_text',
+          text: 'Open Email Queue',
+          emoji: true,
         },
+        url: stats.dashboardUrl,
+        action_id: 'open_dashboard',
       },
     ],
+  });
+
+  return {
+    text: `Email Queue: ${stats.unclaimed.total} unclaimed, ${stats.awaitingTeam.total} awaiting team reply`,
+    blocks,
   };
 }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase, type EmailTicket } from '@/lib/supabase';
+import { supabase, enrichTickets, type EmailTicket } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,27 +83,10 @@ export async function GET(request: NextRequest) {
     const massEmailThreads = new Set(massEmailMessages?.map(m => m.gmail_thread_id) || []);
 
     // Add computed fields for UI
-    const now = new Date();
-    const enrichedTickets = (tickets as EmailTicket[]).map(ticket => {
-      const lastInbound = ticket.last_inbound_ts ? new Date(ticket.last_inbound_ts) : null;
-      // Calculate age in hours
-      const ageHours = lastInbound 
-        ? Math.floor((now.getTime() - lastInbound.getTime()) / (1000 * 60 * 60))
-        : null;
-
-      // Stale if needs response and last customer email was >24h ago
-      const isStale = ticket.needs_response && lastInbound
-        ? (now.getTime() - lastInbound.getTime()) > 24 * 60 * 60 * 1000
-        : false;
-
-      return {
-        ...ticket,
-        age_hours: ageHours,
-        age_display: formatAge(ageHours),
-        is_stale: isStale,
-        is_mass_email_thread: massEmailThreads.has(ticket.gmail_thread_id),
-      };
-    });
+    const enrichedTickets = enrichTickets(tickets as EmailTicket[]).map(ticket => ({
+      ...ticket,
+      is_mass_email_thread: massEmailThreads.has(ticket.gmail_thread_id),
+    }));
 
     return NextResponse.json({
       tickets: enrichedTickets,
@@ -115,14 +98,6 @@ export async function GET(request: NextRequest) {
     console.error('[Tickets API] Error:', error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
-}
-
-function formatAge(hours: number | null): string {
-  if (hours === null) return '-';
-  if (hours < 1) return '< 1h';
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
 }
 
 async function findMatchingTickets(search: string): Promise<string[]> {

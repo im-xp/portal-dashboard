@@ -579,7 +579,7 @@ export default function EmailQueuePage() {
                                   {claimingKey === ticket.ticket_key ? (
                                     <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
                                   ) : (
-                                    'Drop'
+                                    'Unclaim'
                                   )}
                                 </Button>
                               ) : !ticket.claimed_by ? (
@@ -597,25 +597,6 @@ export default function EmailQueuePage() {
                                   )}
                                 </Button>
                               ) : null}
-
-                              {ticket.claimed_by && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleClaim(ticket.ticket_key, 'mark_responded')}
-                                  disabled={claimingKey === ticket.ticket_key}
-                                  className="text-xs md:text-sm h-7 md:h-8 px-2 md:px-3"
-                                >
-                                  {claimingKey === ticket.ticket_key ? (
-                                    <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
-                                  ) : (
-                                    <>
-                                      <span className="hidden md:inline">Mark Replied</span>
-                                      <span className="md:hidden">Done</span>
-                                    </>
-                                  )}
-                                </Button>
-                              )}
                             </>
                           )}
 

@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/slack-stale",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/fever-sync",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

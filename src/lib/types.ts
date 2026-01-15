@@ -208,3 +208,57 @@ export interface DashboardData {
   payments: PaymentWithProducts[];
 }
 
+// Popup Cities
+export interface PopupCity {
+  id: number;
+  name: string;
+  slug: string;
+  location?: string;
+}
+
+// Fever Data Types (from Supabase cache)
+export interface FeverOrder {
+  fever_order_id: string;
+  order_created_at: string | null;
+  buyer_email: string | null;
+  buyer_first_name: string | null;
+  buyer_last_name: string | null;
+  plan_id: string | null;
+  plan_name: string | null;
+  currency: string | null;
+  synced_at: string;
+}
+
+export interface FeverOrderItem {
+  fever_order_id: string;
+  fever_item_id: string;
+  status: string | null;
+  unitary_price: number | null;
+  session_name: string | null;
+  session_start: string | null;
+  venue_name: string | null;
+}
+
+export interface FeverRevenueBreakdown {
+  ticketsAndAddonsRevenue: number;
+  surcharge: number;
+  totalGrossRevenue: number;
+  discount: number;
+  userPayment: number;
+}
+
+export interface FeverMetrics {
+  totalRevenue: number;  // User Payment (main display value)
+  orderCount: number;
+  ticketCount: number;
+  revenueByPlan: Record<string, { revenue: number; count: number; planName: string }>;
+  breakdown: FeverRevenueBreakdown;
+}
+
+export interface FeverSyncState {
+  lastSyncAt: string | null;
+  lastOrderCreatedAt: string | null;
+  orderCount: number;
+  itemCount: number;
+}
+

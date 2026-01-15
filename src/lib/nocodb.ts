@@ -62,7 +62,7 @@ declare global {
 const cache = globalThis.nocoDBCache ?? new Map<string, CacheEntry<unknown>>();
 globalThis.nocoDBCache = cache;
 
-const CACHE_TTL = 60 * 1000; // 60 seconds
+const CACHE_TTL = 120 * 1000; // 2 minutes
 
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key);
@@ -82,7 +82,7 @@ export function clearCache(): void {
   cache.clear();
 }
 
-async function nocoFetch<T>(endpoint: string, retries = 3): Promise<T> {
+async function nocoFetch<T>(endpoint: string, retries = 5): Promise<T> {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const res = await fetch(`${NOCODB_URL}${endpoint}`, {
@@ -94,9 +94,9 @@ async function nocoFetch<T>(endpoint: string, retries = 3): Promise<T> {
       });
 
       if (res.status === 429) {
-        // Rate limited - short backoff for serverless
-        const waitTime = 500 * (attempt + 1);
-        console.log(`Rate limited on ${endpoint}, waiting ${waitTime}ms`);
+        // Rate limited - exponential backoff
+        const waitTime = 1000 * Math.pow(2, attempt);
+        console.log(`Rate limited on ${endpoint}, waiting ${waitTime}ms (attempt ${attempt + 1})`);
         await delay(waitTime);
         continue;
       }
@@ -118,7 +118,7 @@ async function nocoFetch<T>(endpoint: string, retries = 3): Promise<T> {
     } catch (error) {
       console.error(`Fetch attempt ${attempt + 1} failed for ${endpoint}:`, error);
       if (attempt === retries - 1) throw error;
-      await delay(300 * (attempt + 1));
+      await delay(1000 * Math.pow(2, attempt));
     }
   }
   throw new Error('NocoDB API: Max retries exceeded');
@@ -197,15 +197,13 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
 
   console.log('Fetching fresh dashboard data...');
-  
-  // Fetch all base data in parallel for speed
-  const [applications, attendees, products, payments, paymentProducts] = await Promise.all([
-    getApplications(),
-    getAttendees(),
-    getProducts(),
-    getPayments(),
-    getPaymentProducts(),
-  ]);
+
+  // Fetch data sequentially to avoid NocoDB rate limits
+  const applications = await getApplications();
+  const attendees = await getAttendees();
+  const products = await getProducts();
+  const payments = await getPayments();
+  const paymentProducts = await getPaymentProducts();
   
   // NOTE: We skip fetching attendee_products (linked products) because:
   // 1. It requires N API calls (one per attendee) which is too slow

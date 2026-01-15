@@ -3,18 +3,15 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { MetricCard } from '@/components/dashboard/MetricCard';
-import { SourceFilter } from '@/components/dashboard/SourceFilter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Users, UserCheck, CreditCard, DollarSign, Package, Clock, Percent, AlertCircle, RefreshCw, Ticket, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useFilters } from '@/contexts/DashboardFilterContext';
 import { getFeverMetrics, getFeverSyncState } from '@/lib/fever-client';
 import type { DashboardData, FeverMetrics, FeverSyncState } from '@/lib/types';
 
 export default function DashboardPage() {
-  const { filters } = useFilters();
   const [edgeosData, setEdgeosData] = useState<DashboardData | null>(null);
   const [feverMetrics, setFeverMetrics] = useState<FeverMetrics | null>(null);
   const [feverSync, setFeverSync] = useState<FeverSyncState | null>(null);
@@ -28,8 +25,8 @@ export default function DashboardPage() {
       try {
         const [edgeosRes, feverM, feverS] = await Promise.all([
           fetch('/api/dashboard').then(r => r.json()),
-          filters.fever.enabled ? getFeverMetrics() : null,
-          filters.fever.enabled ? getFeverSyncState() : null,
+          getFeverMetrics(),
+          getFeverSyncState(),
         ]);
         setEdgeosData(edgeosRes);
         setFeverMetrics(feverM);
@@ -41,15 +38,15 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, [filters.fever.enabled]);
+  }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
       const [edgeosRes, feverM, feverS] = await Promise.all([
         fetch('/api/dashboard').then(r => r.json()),
-        filters.fever.enabled ? getFeverMetrics() : null,
-        filters.fever.enabled ? getFeverSyncState() : null,
+        getFeverMetrics(),
+        getFeverSyncState(),
       ]);
       setEdgeosData(edgeosRes);
       setFeverMetrics(feverM);
@@ -78,8 +75,7 @@ export default function DashboardPage() {
   const metrics = edgeosData?.metrics;
   const applications = edgeosData?.applications || [];
 
-  const combinedRevenue = (filters.edgeos.enabled ? (metrics?.revenue.approvedRevenue || 0) : 0) +
-    (filters.fever.enabled ? (feverMetrics?.totalRevenue || 0) : 0);
+  const combinedRevenue = (metrics?.revenue.approvedRevenue || 0) + (feverMetrics?.totalRevenue || 0);
 
   if (loading) {
     return (
@@ -87,7 +83,6 @@ export default function DashboardPage() {
         <Header
           title="Dashboard Overview"
           description="Real-time insights into your popup city operations"
-          actions={<SourceFilter />}
         />
         <div className="p-4 md:p-8">
           <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
@@ -105,52 +100,39 @@ export default function DashboardPage() {
       <Header
         title="Dashboard Overview"
         description="Real-time insights into your popup city operations"
-        actions={<SourceFilter />}
       />
 
       <div className="p-4 md:p-8">
         {/* Key Metrics */}
         <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-          {filters.edgeos.enabled && (
-            <>
-              <MetricCard
-                title="Total Applications"
-                value={metrics?.totalApplications || 0}
-                subtitle="All time"
-                icon={<Users className="h-5 w-5" />}
-              />
-              <MetricCard
-                title="Accepted"
-                value={metrics?.acceptedApplications || 0}
-                subtitle={`${Math.round(((metrics?.acceptedApplications || 0) / (metrics?.totalApplications || 1)) * 100)}% acceptance rate`}
-                icon={<UserCheck className="h-5 w-5" />}
-              />
-              <MetricCard
-                title="Paid Attendees"
-                value={metrics?.paidAttendees || 0}
-                subtitle={metrics?.pendingAttendees ? `+ ${metrics.pendingAttendees} pending` : 'From approved payments'}
-                icon={<CreditCard className="h-5 w-5" />}
-              />
-            </>
-          )}
-          {filters.fever.enabled && (
-            <MetricCard
-              title="Fever Tickets"
-              value={feverMetrics?.ticketCount || 0}
-              subtitle={`${feverMetrics?.orderCount || 0} orders`}
-              icon={<Ticket className="h-5 w-5" />}
-            />
-          )}
+          <MetricCard
+            title="Total Applications"
+            value={metrics?.totalApplications || 0}
+            subtitle="All time"
+            icon={<Users className="h-5 w-5" />}
+          />
+          <MetricCard
+            title="Accepted"
+            value={metrics?.acceptedApplications || 0}
+            subtitle={`${Math.round(((metrics?.acceptedApplications || 0) / (metrics?.totalApplications || 1)) * 100)}% acceptance rate`}
+            icon={<UserCheck className="h-5 w-5" />}
+          />
+          <MetricCard
+            title="Paid Attendees"
+            value={metrics?.paidAttendees || 0}
+            subtitle={metrics?.pendingAttendees ? `+ ${metrics.pendingAttendees} pending` : 'From approved payments'}
+            icon={<CreditCard className="h-5 w-5" />}
+          />
+          <MetricCard
+            title="Fever Tickets"
+            value={feverMetrics?.ticketCount || 0}
+            subtitle={`${feverMetrics?.orderCount || 0} orders`}
+            icon={<Ticket className="h-5 w-5" />}
+          />
           <MetricCard
             title="Combined Revenue"
             value={formatCurrency(combinedRevenue)}
-            subtitle={
-              filters.edgeos.enabled && filters.fever.enabled
-                ? 'EdgeOS + Fever'
-                : filters.fever.enabled
-                ? 'Fever only'
-                : 'EdgeOS only'
-            }
+            subtitle="EdgeOS + Fever"
             icon={<DollarSign className="h-5 w-5" />}
             className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200"
           />
@@ -158,96 +140,90 @@ export default function DashboardPage() {
 
         {/* Revenue Breakdown */}
         <div className="mt-4 md:mt-6 grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-3">
-          {filters.edgeos.enabled && (
-            <Card className="bg-emerald-50 border-emerald-200">
-              <CardHeader className="pb-1 md:pb-2">
-                <CardTitle className="text-xs md:text-sm font-medium text-emerald-700 flex items-center gap-2">
-                  <CreditCard className="h-4 w-4" />
-                  EdgeOS Revenue
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-xl md:text-2xl font-bold text-emerald-800">
-                  {formatCurrency(metrics?.revenue.approvedRevenue || 0)}
-                </div>
-                <p className="text-xs md:text-sm text-emerald-600">
-                  {metrics?.revenue.approvedPaymentsCount || 0} payments completed
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          <Card className="bg-emerald-50 border-emerald-200">
+            <CardHeader className="pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-emerald-700 flex items-center gap-2">
+                <CreditCard className="h-4 w-4" />
+                EdgeOS Revenue
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-xl md:text-2xl font-bold text-emerald-800">
+                {formatCurrency(metrics?.revenue.approvedRevenue || 0)}
+              </div>
+              <p className="text-xs md:text-sm text-emerald-600">
+                {metrics?.revenue.approvedPaymentsCount || 0} payments completed
+              </p>
+            </CardContent>
+          </Card>
 
-          {filters.fever.enabled && (
-            <Card className="bg-purple-50 border-purple-200">
-              <CardHeader className="pb-1 md:pb-2">
-                <CardTitle className="text-xs md:text-sm font-medium text-purple-700 flex items-center gap-2">
-                  <Ticket className="h-4 w-4" />
-                  Fever Revenue
-                  <button
-                    onClick={() => setFeverExpanded(!feverExpanded)}
-                    className="ml-auto p-0.5 hover:bg-purple-100 rounded"
-                  >
-                    <ChevronDown className={cn('h-4 w-4 transition-transform', feverExpanded && 'rotate-180')} />
-                  </button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-xl md:text-2xl font-bold text-purple-800">
-                  {formatCurrency(feverMetrics?.totalRevenue || 0)}
-                </div>
-                <p className="text-xs md:text-sm text-purple-600">
-                  {feverMetrics?.ticketCount || 0} tickets sold
-                </p>
-                {feverExpanded && feverMetrics?.breakdown && (
-                  <div className="mt-3 pt-3 border-t border-purple-200 space-y-1.5 text-xs">
-                    <div className="flex justify-between text-purple-700">
-                      <span>Tickets & Add-ons</span>
-                      <span>{formatCurrency(feverMetrics.breakdown.ticketsAndAddonsRevenue)}</span>
-                    </div>
-                    <div className="flex justify-between text-purple-700">
-                      <span>Surcharge</span>
-                      <span>{formatCurrency(feverMetrics.breakdown.surcharge)}</span>
-                    </div>
-                    <div className="flex justify-between font-medium text-purple-800 pt-1 border-t border-purple-100">
-                      <span>Gross Revenue</span>
-                      <span>{formatCurrency(feverMetrics.breakdown.totalGrossRevenue)}</span>
-                    </div>
-                    <div className="flex justify-between text-purple-600">
-                      <span>Discount</span>
-                      <span>-{formatCurrency(feverMetrics.breakdown.discount)}</span>
-                    </div>
-                    <div className="flex justify-between font-semibold text-purple-900 pt-1 border-t border-purple-200">
-                      <span>User Payment</span>
-                      <span>{formatCurrency(feverMetrics.breakdown.userPayment)}</span>
-                    </div>
+          <Card className="bg-purple-50 border-purple-200">
+            <CardHeader className="pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-purple-700 flex items-center gap-2">
+                <Ticket className="h-4 w-4" />
+                Fever Revenue
+                <button
+                  onClick={() => setFeverExpanded(!feverExpanded)}
+                  className="ml-auto p-0.5 hover:bg-purple-100 rounded"
+                >
+                  <ChevronDown className={cn('h-4 w-4 transition-transform', feverExpanded && 'rotate-180')} />
+                </button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-xl md:text-2xl font-bold text-purple-800">
+                {formatCurrency(feverMetrics?.totalRevenue || 0)}
+              </div>
+              <p className="text-xs md:text-sm text-purple-600">
+                {feverMetrics?.ticketCount || 0} tickets sold
+              </p>
+              {feverExpanded && feverMetrics?.breakdown && (
+                <div className="mt-3 pt-3 border-t border-purple-200 space-y-1.5 text-xs">
+                  <div className="flex justify-between text-purple-700">
+                    <span>Tickets & Add-ons</span>
+                    <span>{formatCurrency(feverMetrics.breakdown.ticketsAndAddonsRevenue)}</span>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {filters.edgeos.enabled && (
-            <Card className="bg-amber-50 border-amber-200">
-              <CardHeader className="pb-1 md:pb-2">
-                <CardTitle className="text-xs md:text-sm font-medium text-amber-700 flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Pending Payments
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-xl md:text-2xl font-bold text-amber-800">
-                  {formatCurrency(metrics?.revenue.pendingRevenue || 0)}
+                  <div className="flex justify-between text-purple-700">
+                    <span>Surcharge</span>
+                    <span>{formatCurrency(feverMetrics.breakdown.surcharge)}</span>
+                  </div>
+                  <div className="flex justify-between font-medium text-purple-800 pt-1 border-t border-purple-100">
+                    <span>Gross Revenue</span>
+                    <span>{formatCurrency(feverMetrics.breakdown.totalGrossRevenue)}</span>
+                  </div>
+                  <div className="flex justify-between text-purple-600">
+                    <span>Discount</span>
+                    <span>-{formatCurrency(feverMetrics.breakdown.discount)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-purple-900 pt-1 border-t border-purple-200">
+                    <span>User Payment</span>
+                    <span>{formatCurrency(feverMetrics.breakdown.userPayment)}</span>
+                  </div>
                 </div>
-                <p className="text-xs md:text-sm text-amber-600">
-                  {metrics?.revenue.pendingPaymentsCount || 0} checkouts in progress
-                </p>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-amber-50 border-amber-200">
+            <CardHeader className="pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-amber-700 flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Pending Payments
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-xl md:text-2xl font-bold text-amber-800">
+                {formatCurrency(metrics?.revenue.pendingRevenue || 0)}
+              </div>
+              <p className="text-xs md:text-sm text-amber-600">
+                {metrics?.revenue.pendingPaymentsCount || 0} checkouts in progress
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Fever Sync Status */}
-        {filters.fever.enabled && feverSync && (
+        {feverSync && (
           <div className="mt-4 flex items-center gap-3 text-sm text-zinc-500">
             <span>Fever last synced: {formatTimeAgo(feverSync.lastSyncAt)}</span>
             <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
@@ -259,7 +235,7 @@ export default function DashboardPage() {
 
         <div className="mt-6 md:mt-8 grid gap-4 md:gap-6 lg:grid-cols-2">
           {/* Application Status Breakdown */}
-          {filters.edgeos.enabled && metrics && (
+          {metrics && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Application Funnel</CardTitle>
@@ -295,7 +271,7 @@ export default function DashboardPage() {
           )}
 
           {/* Fever Sales by Plan */}
-          {filters.fever.enabled && feverMetrics && Object.keys(feverMetrics.revenueByPlan).length > 0 && (
+          {feverMetrics && Object.keys(feverMetrics.revenueByPlan).length > 0 && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg">Fever Sales by Plan</CardTitle>
@@ -323,7 +299,7 @@ export default function DashboardPage() {
           )}
 
           {/* Top Products by Revenue */}
-          {filters.edgeos.enabled && metrics && (
+          {metrics && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg">Product Sales (Actual Revenue)</CardTitle>
@@ -369,7 +345,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Payments with Discounts */}
-        {filters.edgeos.enabled && metrics && metrics.paymentsWithDiscounts.length > 0 && (
+        {metrics && metrics.paymentsWithDiscounts.length > 0 && (
           <Card className="mt-6">
             <CardHeader className="flex flex-row items-center gap-2">
               <Percent className="h-5 w-5 text-purple-500" />
@@ -419,46 +395,44 @@ export default function DashboardPage() {
         )}
 
         {/* Recent Applications */}
-        {filters.edgeos.enabled && (
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle className="text-lg">Recent Applications</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {applications
-                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                  .slice(0, 5)
-                  .map((app) => {
-                    const hasPurchases = app.attendeesList.some(a => a.purchasedProducts.length > 0);
-                    return (
-                      <div key={app.id} className="flex items-center justify-between py-2 border-b border-zinc-100 last:border-0">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 flex items-center justify-center text-sm font-medium">
-                            {app.first_name[0]}{app.last_name[0]}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{app.first_name} {app.last_name}</p>
-                            <p className="text-xs text-zinc-500">{app.email}</p>
-                          </div>
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Recent Applications</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {applications
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .slice(0, 5)
+                .map((app) => {
+                  const hasPurchases = app.attendeesList.some(a => a.purchasedProducts.length > 0);
+                  return (
+                    <div key={app.id} className="flex items-center justify-between py-2 border-b border-zinc-100 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 flex items-center justify-center text-sm font-medium">
+                          {app.first_name[0]}{app.last_name[0]}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={app.status === 'accepted' ? 'default' : 'secondary'} className="capitalize">
-                            {app.status}
-                          </Badge>
-                          {hasPurchases && (
-                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                              Has Products
-                            </Badge>
-                          )}
+                        <div>
+                          <p className="text-sm font-medium">{app.first_name} {app.last_name}</p>
+                          <p className="text-xs text-zinc-500">{app.email}</p>
                         </div>
                       </div>
-                    );
-                  })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                      <div className="flex items-center gap-2">
+                        <Badge variant={app.status === 'accepted' ? 'default' : 'secondary'} className="capitalize">
+                          {app.status}
+                        </Badge>
+                        {hasPurchases && (
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                            Has Products
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Info Banner */}
         <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-4 flex items-start gap-3">
@@ -468,7 +442,6 @@ export default function DashboardPage() {
             <p className="text-sm text-blue-700 mt-1">
               <strong>EdgeOS Revenue</strong> = Completed payments from popup city applications.
               <strong> Fever Revenue</strong> = Ticket sales from Fever platform (synced every 5 min).
-              Toggle data sources above to filter the dashboard.
             </p>
           </div>
         </div>

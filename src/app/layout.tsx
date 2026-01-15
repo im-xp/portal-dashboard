@@ -4,7 +4,6 @@ import './globals.css';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { AuthProvider } from '@/components/providers/AuthProvider';
-import { DashboardFilterProvider } from '@/contexts/DashboardFilterContext';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -37,15 +36,13 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AuthProvider>
-          <DashboardFilterProvider>
-            <div className="flex min-h-screen">
-              <Sidebar />
-              <MobileNav />
-              <main className="flex-1 md:ml-64 bg-zinc-50 pt-14 pb-16 md:pt-0 md:pb-0">
-                {children}
-              </main>
-            </div>
-          </DashboardFilterProvider>
+          <div className="flex min-h-screen">
+            <Sidebar />
+            <MobileNav />
+            <main className="flex-1 md:ml-64 bg-zinc-50 pt-14 pb-16 md:pt-0 md:pb-0">
+              {children}
+            </main>
+          </div>
         </AuthProvider>
       </body>
     </html>

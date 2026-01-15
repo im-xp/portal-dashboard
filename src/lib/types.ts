@@ -262,14 +262,3 @@ export interface FeverSyncState {
   itemCount: number;
 }
 
-// Dashboard Filter State
-export interface FilterState {
-  edgeos: {
-    enabled: boolean;
-    cities: Record<number, boolean>;
-  };
-  fever: {
-    enabled: boolean;
-  };
-}
-

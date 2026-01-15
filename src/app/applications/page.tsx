@@ -1,4 +1,6 @@
-import { getDashboardData } from '@/lib/nocodb';
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,16 +14,65 @@ import {
 } from '@/components/ui/table';
 import { FileText, Users, Clock, CheckCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { cn } from '@/lib/utils';
+import type { DashboardData, PopupCity } from '@/lib/types';
 
-export const dynamic = 'force-dynamic';
+export default function ApplicationsPage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [cities, setCities] = useState<PopupCity[]>([]);
+  const [selectedCityId, setSelectedCityId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
-export default async function ApplicationsPage() {
-  const { applications, metrics } = await getDashboardData();
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const [dashboardRes, citiesRes] = await Promise.all([
+          fetch('/api/dashboard').then(r => r.json()),
+          fetch('/api/popup-cities').then(r => r.json()),
+        ]);
+        setData(dashboardRes);
+        setCities(citiesRes);
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
 
-  // Sort by most recent first
-  const sortedApplications = [...applications].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  const filteredApplications = useMemo(() => {
+    if (!data) return [];
+    const apps = selectedCityId
+      ? data.applications.filter(app => app.popup_city_id === selectedCityId)
+      : data.applications;
+    return [...apps].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [data, selectedCityId]);
+
+  const filteredMetrics = useMemo(() => {
+    if (!data) return null;
+    if (!selectedCityId) return data.metrics;
+
+    const apps = data.applications.filter(app => app.popup_city_id === selectedCityId);
+    const applicationsByStatus: Record<string, number> = {};
+    apps.forEach(app => {
+      applicationsByStatus[app.status] = (applicationsByStatus[app.status] || 0) + 1;
+    });
+
+    const paidAttendees = apps.reduce((sum, app) => {
+      return sum + app.attendeesList.filter(att => att.purchasedProducts.length > 0).length;
+    }, 0);
+
+    return {
+      ...data.metrics,
+      totalApplications: apps.length,
+      applicationsByStatus,
+      paidAttendees,
+    };
+  }, [data, selectedCityId]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -36,6 +87,25 @@ export default async function ApplicationsPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex flex-col">
+        <Header
+          title="Applications"
+          description="Track application pipeline and status"
+        />
+        <div className="p-4 md:p-8">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-6">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-24 bg-zinc-100 animate-pulse rounded-lg" />
+            ))}
+          </div>
+          <div className="h-96 bg-zinc-100 animate-pulse rounded-lg" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col">
       <Header
@@ -44,6 +114,35 @@ export default async function ApplicationsPage() {
       />
 
       <div className="p-4 md:p-8">
+        {/* City Filter */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            onClick={() => setSelectedCityId(null)}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-sm font-medium transition-colors',
+              selectedCityId === null
+                ? 'bg-zinc-900 text-white'
+                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+            )}
+          >
+            All Cities
+          </button>
+          {cities.map(city => (
+            <button
+              key={city.id}
+              onClick={() => setSelectedCityId(city.id)}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-sm font-medium transition-colors',
+                selectedCityId === city.id
+                  ? 'bg-zinc-900 text-white'
+                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+              )}
+            >
+              {city.name}
+            </button>
+          ))}
+        </div>
+
         {/* Status Summary */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-6 md:mb-8">
           <Card>
@@ -52,7 +151,7 @@ export default async function ApplicationsPage() {
               <FileText className="h-4 w-4 md:h-5 md:w-5 text-zinc-400" />
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="text-2xl md:text-3xl font-bold">{metrics.totalApplications}</div>
+              <div className="text-2xl md:text-3xl font-bold">{filteredMetrics?.totalApplications || 0}</div>
             </CardContent>
           </Card>
 
@@ -63,7 +162,7 @@ export default async function ApplicationsPage() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="text-2xl md:text-3xl font-bold text-emerald-600">
-                {metrics.applicationsByStatus['accepted'] || 0}
+                {filteredMetrics?.applicationsByStatus['accepted'] || 0}
               </div>
             </CardContent>
           </Card>
@@ -75,7 +174,7 @@ export default async function ApplicationsPage() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="text-2xl md:text-3xl font-bold text-amber-600">
-                {metrics.applicationsByStatus['in review'] || 0}
+                {filteredMetrics?.applicationsByStatus['in review'] || 0}
               </div>
             </CardContent>
           </Card>
@@ -86,7 +185,7 @@ export default async function ApplicationsPage() {
               <Users className="h-4 w-4 md:h-5 md:w-5 text-zinc-400" />
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="text-2xl md:text-3xl font-bold">{metrics.paidAttendees}</div>
+              <div className="text-2xl md:text-3xl font-bold">{filteredMetrics?.paidAttendees || 0}</div>
             </CardContent>
           </Card>
         </div>
@@ -94,7 +193,11 @@ export default async function ApplicationsPage() {
         {/* Applications Table */}
         <Card>
           <CardHeader className="pb-3 md:pb-6">
-            <CardTitle className="text-base md:text-lg">All Applications</CardTitle>
+            <CardTitle className="text-base md:text-lg">
+              {selectedCityId
+                ? `Applications (${cities.find(c => c.id === selectedCityId)?.name})`
+                : 'All Applications'}
+            </CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table className="min-w-[700px]">
@@ -109,7 +212,7 @@ export default async function ApplicationsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedApplications.map((app) => {
+                {filteredApplications.map((app) => {
                   const totalProducts = app.attendeesList.reduce(
                     (sum, att) => sum + att.purchasedProducts.length,
                     0
@@ -160,6 +263,13 @@ export default async function ApplicationsPage() {
                     </TableRow>
                   );
                 })}
+                {filteredApplications.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-zinc-400 py-8">
+                      No applications found
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -168,4 +278,3 @@ export default async function ApplicationsPage() {
     </div>
   );
 }
-

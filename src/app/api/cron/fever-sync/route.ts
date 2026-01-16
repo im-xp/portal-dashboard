@@ -48,10 +48,11 @@ async function runSync(isManual = false): Promise<NextResponse> {
     }
 
     const dateFrom = isManual ? undefined : syncState?.last_order_created_at?.split('T')[0];
+    const dateTo = dateFrom ? new Date().toISOString().split('T')[0] : undefined;
 
-    console.log(`[Fever Sync] Starting ${isManual ? 'manual' : 'incremental'} sync${dateFrom ? ` from ${dateFrom}` : ''}`);
+    console.log(`[Fever Sync] Starting ${isManual ? 'manual' : 'incremental'} sync${dateFrom ? ` from ${dateFrom} to ${dateTo}` : ''}`);
 
-    const { orders, items } = await fetchFeverOrders({ dateFrom });
+    const { orders, items } = await fetchFeverOrders({ dateFrom, dateTo });
 
     console.log(`[Fever Sync] Fetched ${orders.length} orders, ${items.length} items`);
 

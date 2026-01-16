@@ -39,6 +39,9 @@ export default function ProductsPage() {
   const [feverStatusFilter, setFeverStatusFilter] = useState('');
   const [feverPlanFilter, setFeverPlanFilter] = useState('');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [salesByPlanExpanded, setSalesByPlanExpanded] = useState(false);
+  const [salesByProductExpanded, setSalesByProductExpanded] = useState(false);
+  const [salesByProductFilter, setSalesByProductFilter] = useState<string>('all');
 
   useEffect(() => {
     async function fetchData() {
@@ -610,61 +613,115 @@ export default function ProductsPage() {
                       for (const item of order.items) {
                         if (item.status !== 'purchased') continue;
                         const name = item.session_name || 'Unknown';
-                        if (!acc[name]) acc[name] = { count: 0, revenue: 0, isAddon: item.session_is_addon };
+                        const type = item.session_is_addon ? 'Addon' : 'Ticket';
+                        if (!acc[name]) acc[name] = { count: 0, revenue: 0, type };
                         acc[name].count++;
                         acc[name].revenue += (item.unitary_price || 0) + (item.surcharge || 0);
                       }
                       return acc;
-                    }, {} as Record<string, { count: number; revenue: number; isAddon: boolean | null }>);
+                    }, {} as Record<string, { count: number; revenue: number; type: string }>);
 
-                    const sorted = Object.entries(bySession).sort(([, a], [, b]) => b.revenue - a.revenue);
-                    const totalRevenue = sorted.reduce((sum, [, d]) => sum + d.revenue, 0);
-                    const totalCount = sorted.reduce((sum, [, d]) => sum + d.count, 0);
+                    const allEntries = Object.entries(bySession).sort(([, a], [, b]) => b.revenue - a.revenue);
+                    const productTypes = [...new Set(allEntries.map(([, d]) => d.type))].sort();
+
+                    const filtered = salesByProductFilter === 'all'
+                      ? allEntries
+                      : allEntries.filter(([, d]) => d.type === salesByProductFilter);
+
+                    const displayed = salesByProductExpanded ? filtered : filtered.slice(0, 4);
+                    const hasMore = filtered.length > 4;
+                    const totalRevenue = filtered.reduce((sum, [, d]) => sum + d.revenue, 0);
+                    const totalCount = filtered.reduce((sum, [, d]) => sum + d.count, 0);
 
                     return (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Product</TableHead>
-                            <TableHead className="text-center w-20">Type</TableHead>
-                            <TableHead className="text-right w-24">Qty</TableHead>
-                            <TableHead className="text-right w-32">Revenue</TableHead>
-                            <TableHead className="text-right w-20">%</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {sorted.map(([name, data]) => (
-                            <TableRow key={name}>
-                              <TableCell className="font-medium text-sm">{name}</TableCell>
-                              <TableCell className="text-center">
-                                {data.isAddon ? (
-                                  <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
-                                    Addon
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="text-[10px]">
-                                    Ticket
-                                  </Badge>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-right text-purple-600">{data.count}</TableCell>
-                              <TableCell className="text-right font-semibold text-purple-600">
-                                {formatCurrency(data.revenue)}
-                              </TableCell>
-                              <TableCell className="text-right text-zinc-500 text-sm">
-                                {totalRevenue > 0 ? `${((data.revenue / totalRevenue) * 100).toFixed(1)}%` : '-'}
-                              </TableCell>
-                            </TableRow>
+                      <>
+                        <div className="flex gap-1 mb-4 bg-zinc-100 p-1 rounded-lg w-fit">
+                          <button
+                            onClick={() => { setSalesByProductFilter('all'); setSalesByProductExpanded(false); }}
+                            className={cn(
+                              'px-3 py-1 rounded-md text-sm font-medium transition-colors',
+                              salesByProductFilter === 'all'
+                                ? 'bg-white text-zinc-900 shadow-sm'
+                                : 'text-zinc-600 hover:text-zinc-900'
+                            )}
+                          >
+                            All
+                          </button>
+                          {productTypes.map(type => (
+                            <button
+                              key={type}
+                              onClick={() => { setSalesByProductFilter(type); setSalesByProductExpanded(false); }}
+                              className={cn(
+                                'px-3 py-1 rounded-md text-sm font-medium transition-colors',
+                                salesByProductFilter === type
+                                  ? 'bg-white text-zinc-900 shadow-sm'
+                                  : 'text-zinc-600 hover:text-zinc-900'
+                              )}
+                            >
+                              {type}
+                            </button>
                           ))}
-                          <TableRow className="border-t-2 font-semibold">
-                            <TableCell>Total</TableCell>
-                            <TableCell></TableCell>
-                            <TableCell className="text-right text-purple-700">{totalCount}</TableCell>
-                            <TableCell className="text-right text-purple-700">{formatCurrency(totalRevenue)}</TableCell>
-                            <TableCell className="text-right">100%</TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Product</TableHead>
+                              {salesByProductFilter === 'all' && <TableHead className="text-center w-20">Type</TableHead>}
+                              <TableHead className="text-right w-24">Qty</TableHead>
+                              <TableHead className="text-right w-32">Revenue</TableHead>
+                              <TableHead className="text-right w-20">%</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {displayed.map(([name, data]) => (
+                              <TableRow key={name}>
+                                <TableCell className="font-medium text-sm">{name}</TableCell>
+                                {salesByProductFilter === 'all' && (
+                                  <TableCell className="text-center">
+                                    {data.type === 'Addon' ? (
+                                      <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+                                        Addon
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-[10px]">
+                                        Ticket
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                )}
+                                <TableCell className="text-right text-purple-600">{data.count}</TableCell>
+                                <TableCell className="text-right font-semibold text-purple-600">
+                                  {formatCurrency(data.revenue)}
+                                </TableCell>
+                                <TableCell className="text-right text-zinc-500 text-sm">
+                                  {totalRevenue > 0 ? `${((data.revenue / totalRevenue) * 100).toFixed(1)}%` : '-'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {salesByProductExpanded && (
+                              <TableRow className="border-t-2 font-semibold">
+                                <TableCell>Total</TableCell>
+                                {salesByProductFilter === 'all' && <TableCell></TableCell>}
+                                <TableCell className="text-right text-purple-700">{totalCount}</TableCell>
+                                <TableCell className="text-right text-purple-700">{formatCurrency(totalRevenue)}</TableCell>
+                                <TableCell className="text-right">100%</TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                        {hasMore && (
+                          <button
+                            onClick={() => setSalesByProductExpanded(!salesByProductExpanded)}
+                            className="w-full pt-3 flex items-center justify-center gap-1 text-sm text-zinc-500 hover:text-zinc-700 transition-colors"
+                          >
+                            {salesByProductExpanded ? (
+                              <>Show less <ChevronDown className="h-4 w-4 rotate-180" /></>
+                            ) : (
+                              <>Show {filtered.length - 4} more <ChevronDown className="h-4 w-4" /></>
+                            )}
+                          </button>
+                        )}
+                      </>
                     );
                   })()}
                 </CardContent>
@@ -678,21 +735,40 @@ export default function ProductsPage() {
                   <CardTitle className="text-sm text-zinc-500">Sales by Plan</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
-                    {Object.entries(feverMetrics.revenueByPlan)
-                      .sort(([, a], [, b]) => b.revenue - a.revenue)
-                      .map(([planId, data]) => (
-                        <div key={planId} className="flex items-center justify-between py-1">
-                          <div className="font-medium text-sm">{data.planName}</div>
-                          <div className="flex items-center gap-4">
-                            <span className="text-sm text-zinc-500">{data.count} tickets</span>
-                            <span className="font-semibold text-purple-600 w-24 text-right">
-                              {formatCurrency(data.revenue)}
-                            </span>
+                  {(() => {
+                    const sorted = Object.entries(feverMetrics.revenueByPlan)
+                      .sort(([, a], [, b]) => b.revenue - a.revenue);
+                    const displayed = salesByPlanExpanded ? sorted : sorted.slice(0, 4);
+                    const hasMore = sorted.length > 4;
+
+                    return (
+                      <div className="space-y-2">
+                        {displayed.map(([planId, data]) => (
+                          <div key={planId} className="flex items-center justify-between py-1">
+                            <div className="font-medium text-sm">{data.planName}</div>
+                            <div className="flex items-center gap-4">
+                              <span className="text-sm text-zinc-500">{data.count} tickets</span>
+                              <span className="font-semibold text-purple-600 w-24 text-right">
+                                {formatCurrency(data.revenue)}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                  </div>
+                        ))}
+                        {hasMore && (
+                          <button
+                            onClick={() => setSalesByPlanExpanded(!salesByPlanExpanded)}
+                            className="w-full pt-2 flex items-center justify-center gap-1 text-sm text-zinc-500 hover:text-zinc-700 transition-colors"
+                          >
+                            {salesByPlanExpanded ? (
+                              <>Show less <ChevronDown className="h-4 w-4 rotate-180" /></>
+                            ) : (
+                              <>Show {sorted.length - 4} more <ChevronDown className="h-4 w-4" /></>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             )}

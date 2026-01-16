@@ -17,12 +17,12 @@ psql $DATABASE_URL -c "SELECT 'messages' as t, count(*) FROM email_messages UNIO
 
 ### Setup DATABASE_URL
 
-1. Go to Supabase Dashboard → Settings → Database
-2. Copy the "Connection string" (URI format)
-3. Add to `.env.local`:
-   ```
-   DATABASE_URL=postgresql://postgres.[project-ref]:[password]@aws-0-us-east-2.pooler.supabase.com:6543/postgres
-   ```
+Use the **Session Pooler** format (works on IPv4 networks):
+```
+DATABASE_URL=postgresql://postgres.[project-ref]:[password]@aws-1-us-east-2.pooler.supabase.com:5432/postgres
+```
+
+Note: Direct connection (`db.xxx.supabase.co`) is IPv6-only. The pooler prefix (`aws-1` vs `aws-0`) varies by project - run `npx supabase inspect db db-stats --debug 2>&1 | grep pooler` to find yours.
 
 ### Why Not REST API?
 

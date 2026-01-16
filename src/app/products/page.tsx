@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Package, DollarSign, TrendingUp, Ticket, RefreshCw, ChevronDown, ChevronRight, Search, X, MapPin, Calendar, User, CreditCard, Tag, MessageSquare, Globe } from 'lucide-react';
+import { Package, DollarSign, TrendingUp, Ticket, RefreshCw, ChevronDown, ChevronRight, Search, X, MapPin, Calendar, User, CreditCard, Tag, MessageSquare, Globe, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,17 @@ import { getFeverMetrics, getFeverSyncState, getFeverOrders } from '@/lib/fever-
 import type { DashboardData, FeverMetrics, FeverSyncState, FeverOrderWithItems, FeverOrdersResponse, Product, PaymentWithProducts, PopupCity } from '@/lib/types';
 
 type ActiveSource = 'edgeos' | 'fever';
+
+function InfoTooltip({ text, className }: { text: string; className?: string }) {
+  return (
+    <span className="relative group inline-flex">
+      <Info className={cn('h-3 w-3 cursor-help', className || 'text-purple-400')} />
+      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 rounded shadow-lg whitespace-normal w-48 text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50">
+        {text}
+      </span>
+    </span>
+  );
+}
 
 export default function ProductsPage() {
   const [edgeosData, setEdgeosData] = useState<DashboardData | null>(null);
@@ -524,7 +535,10 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 mb-6">
               <Card className="bg-purple-50 border-purple-200">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
-                  <CardTitle className="text-xs md:text-sm font-medium text-purple-700">Tickets Sold</CardTitle>
+                  <CardTitle className="text-xs md:text-sm font-medium text-purple-700 flex items-center gap-1">
+                    Tickets Sold
+                    <InfoTooltip text="Count of individual ticket/addon items with status 'purchased'. Excludes cancelled or refunded items." />
+                  </CardTitle>
                   <Ticket className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
                 </CardHeader>
                 <CardContent className="pt-0">
@@ -537,24 +551,28 @@ export default function ProductsPage() {
 
               <Card className="bg-purple-50 border-purple-200">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
-                  <CardTitle className="text-xs md:text-sm font-medium text-purple-700">Orders</CardTitle>
+                  <CardTitle className="text-xs md:text-sm font-medium text-purple-700 flex items-center gap-1">
+                    Orders
+                    <InfoTooltip text="Count of unique orders with at least one purchased item. Orders with only cancelled items are excluded." />
+                  </CardTitle>
                   <Package className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="text-2xl md:text-3xl font-bold text-purple-900">
                     {feverMetrics?.orderCount || 0}
                   </div>
-                  <p className="text-xs md:text-sm text-purple-700 mt-1 hidden md:block">completed orders</p>
+                  <p className="text-xs md:text-sm text-purple-700 mt-1 hidden md:block">with purchased items</p>
                 </CardContent>
               </Card>
 
               <Card className="bg-purple-50 border-purple-200">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
-                  <CardTitle className="text-xs md:text-sm font-medium text-purple-700 flex items-center gap-2">
+                  <CardTitle className="text-xs md:text-sm font-medium text-purple-700 flex items-center gap-1">
                     Revenue
+                    <InfoTooltip text="Total user payment from purchased items only: (price + surcharge - discount). Excludes cancelled/refunded." />
                     <button
                       onClick={() => setFeverExpanded(!feverExpanded)}
-                      className="p-0.5 hover:bg-purple-100 rounded"
+                      className="p-0.5 hover:bg-purple-100 rounded ml-1"
                     >
                       <ChevronDown className={cn('h-4 w-4 transition-transform', feverExpanded && 'rotate-180')} />
                     </button>
@@ -886,7 +904,10 @@ export default function ProductsPage() {
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Orders ({feverOrders?.total || 0})</CardTitle>
+                  <CardTitle className="text-base flex items-center gap-1">
+                    Orders ({feverOrders?.total || 0})
+                    <InfoTooltip text="All orders in database, including those with only cancelled items. May differ from metric above." className="text-zinc-400 h-3.5 w-3.5" />
+                  </CardTitle>
                   <Button
                     variant="ghost"
                     size="sm"

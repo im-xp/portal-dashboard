@@ -262,3 +262,104 @@ export interface FeverSyncState {
   itemCount: number;
 }
 
+export interface FeverOrderItem {
+  fever_order_id: string;
+  fever_item_id: string;
+  status: string | null;
+  created_at: string | null;
+  modified_at: string | null;
+  purchase_date: string | null;
+  cancellation_date: string | null;
+  cancellation_type: string | null;
+  validated_date: string | null;
+  discount: number | null;
+  surcharge: number | null;
+  unitary_price: number | null;
+  is_invite: boolean | null;
+  rating_value: number | null;
+  rating_comment: string | null;
+  owner_id: string | null;
+  owner_email: string | null;
+  owner_first_name: string | null;
+  owner_last_name: string | null;
+  owner_dob: string | null;
+  owner_language: string | null;
+  owner_marketing_pref: boolean | null;
+  plan_code_id: string | null;
+  plan_code_barcode: string | null;
+  plan_code_created: string | null;
+  plan_code_modified: string | null;
+  plan_code_redeemed: string | null;
+  plan_code_is_cancelled: boolean | null;
+  plan_code_is_validated: boolean | null;
+  session_id: string | null;
+  session_name: string | null;
+  session_start: string | null;
+  session_end: string | null;
+  session_first_purchasable: string | null;
+  session_is_addon: boolean | null;
+  session_is_shop_product: boolean | null;
+  session_is_wait_list: boolean | null;
+  venue_name: string | null;
+  venue_city: string | null;
+  venue_country: string | null;
+  venue_timezone: string | null;
+}
+
+export interface BookingQuestion {
+  id: string;
+  question: string;
+  answers: string[];
+  index: number;
+}
+
+export interface FeverOrderWithItems {
+  fever_order_id: string;
+  parent_order_id: string | null;
+  order_created_at: string | null;
+  order_updated_at: string | null;
+  surcharge: number | null;
+  currency: string | null;
+  purchase_channel: string | null;
+  payment_method: string | null;
+  billing_zip_code: string | null;
+  assigned_seats: string | null;
+  buyer_id: string | null;
+  buyer_email: string | null;
+  buyer_first_name: string | null;
+  buyer_last_name: string | null;
+  buyer_dob: string | null;
+  buyer_language: string | null;
+  buyer_marketing_pref: boolean | null;
+  purchase_city: string | null;
+  purchase_country: string | null;
+  purchase_region: string | null;
+  purchase_postal: string | null;
+  purchase_quality: string | null;
+  partner_id: string | null;
+  partner_name: string | null;
+  plan_id: string | null;
+  plan_name: string | null;
+  coupon_name: string | null;
+  coupon_code: string | null;
+  business_id: string | null;
+  business_name: string | null;
+  booking_questions: BookingQuestion[] | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  utm_medium: string | null;
+  utm_source: string | null;
+  utm_term: string | null;
+  utm_referring_domain: string | null;
+  synced_at: string | null;
+  items: FeverOrderItem[];
+  item_count: number;
+  total_value: number;
+}
+
+export interface FeverOrdersResponse {
+  orders: FeverOrderWithItems[];
+  total: number;
+  plans: string[];
+}
+

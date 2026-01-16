@@ -1,4 +1,4 @@
-import type { FeverMetrics, FeverSyncState } from './types';
+import type { FeverMetrics, FeverSyncState, FeverOrdersResponse } from './types';
 
 export async function getFeverSyncState(): Promise<FeverSyncState> {
   const res = await fetch('/api/fever?type=sync-state');
@@ -34,4 +34,22 @@ export async function triggerFeverSync(): Promise<{ success: boolean; error?: st
   } catch (error) {
     return { success: false, error: String(error) };
   }
+}
+
+export async function getFeverOrders(params?: {
+  search?: string;
+  status?: string;
+  plan?: string;
+}): Promise<FeverOrdersResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.plan) searchParams.set('plan', params.plan);
+
+  const url = `/api/fever/orders${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch fever orders: ${res.statusText}`);
+  }
+  return res.json();
 }

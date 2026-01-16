@@ -48,6 +48,12 @@ export interface FeverOrder {
   businessId: string | null;
   businessName: string | null;
   bookingQuestions: Record<string, unknown> | null;
+  utmCampaign: string | null;
+  utmContent: string | null;
+  utmMedium: string | null;
+  utmSource: string | null;
+  utmTerm: string | null;
+  utmReferringDomain: string | null;
 }
 
 export interface FeverOrderItem {
@@ -79,6 +85,7 @@ export interface FeverOrderItem {
   planCodeRedeemed: Date | null;
   planCodeIsCancelled: boolean | null;
   planCodeIsValidated: boolean | null;
+  validatedDate: Date | null;
   sessionId: string | null;
   sessionName: string | null;
   sessionStart: Date | null;
@@ -132,6 +139,14 @@ interface FeverApiOrder {
   coupon?: { name?: string; code?: string };
   business?: { id?: string; name?: string };
   booking_questions?: Record<string, unknown>;
+  utm?: {
+    campaign?: string;
+    content?: string;
+    medium?: string;
+    source?: string;
+    term?: string;
+    referring_domain?: string;
+  };
   order_items?: FeverApiItem[];
 }
 
@@ -143,6 +158,7 @@ interface FeverApiItem {
   purchase_date_utc?: string;
   cancellation_date_utc?: string;
   cancellation_type?: string;
+  validated_date_utc?: string;
   discount?: number;
   surcharge?: number;
   unitary_price?: number;
@@ -247,6 +263,12 @@ function transformOrder(apiOrder: FeverApiOrder): FeverOrder {
     businessId: parseString(apiOrder.business?.id),
     businessName: parseString(apiOrder.business?.name),
     bookingQuestions: apiOrder.booking_questions || null,
+    utmCampaign: parseString(apiOrder.utm?.campaign),
+    utmContent: parseString(apiOrder.utm?.content),
+    utmMedium: parseString(apiOrder.utm?.medium),
+    utmSource: parseString(apiOrder.utm?.source),
+    utmTerm: parseString(apiOrder.utm?.term),
+    utmReferringDomain: parseString(apiOrder.utm?.referring_domain),
   };
 }
 
@@ -280,6 +302,7 @@ function transformItem(apiItem: FeverApiItem, orderId: string): FeverOrderItem {
     planCodeRedeemed: parseDate(apiItem.plan_code?.redeemed_date_utc),
     planCodeIsCancelled: parseBoolean(apiItem.plan_code?.is_cancelled),
     planCodeIsValidated: parseBoolean(apiItem.plan_code?.is_validated),
+    validatedDate: parseDate(apiItem.validated_date_utc),
     sessionId: parseString(apiItem.session?.id),
     sessionName: parseString(apiItem.session?.name),
     sessionStart: parseDate(apiItem.session?.start_date_utc),
@@ -492,6 +515,12 @@ export function orderToDbRow(order: FeverOrder): Record<string, unknown> {
     business_id: order.businessId,
     business_name: order.businessName,
     booking_questions: order.bookingQuestions,
+    utm_campaign: order.utmCampaign,
+    utm_content: order.utmContent,
+    utm_medium: order.utmMedium,
+    utm_source: order.utmSource,
+    utm_term: order.utmTerm,
+    utm_referring_domain: order.utmReferringDomain,
     synced_at: new Date().toISOString(),
   };
 }
@@ -526,6 +555,7 @@ export function itemToDbRow(item: FeverOrderItem): Record<string, unknown> {
     plan_code_redeemed: item.planCodeRedeemed?.toISOString() ?? null,
     plan_code_is_cancelled: item.planCodeIsCancelled,
     plan_code_is_validated: item.planCodeIsValidated,
+    validated_date: item.validatedDate?.toISOString() ?? null,
     session_id: item.sessionId,
     session_name: item.sessionName,
     session_start: item.sessionStart?.toISOString() ?? null,

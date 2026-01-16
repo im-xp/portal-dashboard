@@ -12,11 +12,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Package, DollarSign, TrendingUp, Ticket, RefreshCw, ChevronDown } from 'lucide-react';
+import { Package, DollarSign, TrendingUp, Ticket, RefreshCw, ChevronDown, ChevronRight, Search, X, MapPin, Calendar, User, CreditCard, Tag, MessageSquare, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { getFeverMetrics, getFeverSyncState } from '@/lib/fever-client';
-import type { DashboardData, FeverMetrics, FeverSyncState, Product, PaymentWithProducts, PopupCity } from '@/lib/types';
+import { getFeverMetrics, getFeverSyncState, getFeverOrders } from '@/lib/fever-client';
+import type { DashboardData, FeverMetrics, FeverSyncState, FeverOrderWithItems, FeverOrdersResponse, Product, PaymentWithProducts, PopupCity } from '@/lib/types';
 
 type ActiveSource = 'edgeos' | 'fever';
 
@@ -30,6 +31,14 @@ export default function ProductsPage() {
   const [activeSource, setActiveSource] = useState<ActiveSource>('edgeos');
   const [selectedCityId, setSelectedCityId] = useState<number | null>(null);
   const [feverExpanded, setFeverExpanded] = useState(false);
+
+  // Fever orders state
+  const [feverOrders, setFeverOrders] = useState<FeverOrdersResponse | null>(null);
+  const [feverOrdersLoading, setFeverOrdersLoading] = useState(false);
+  const [feverSearch, setFeverSearch] = useState('');
+  const [feverStatusFilter, setFeverStatusFilter] = useState('');
+  const [feverPlanFilter, setFeverPlanFilter] = useState('');
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     async function fetchData() {
@@ -53,6 +62,61 @@ export default function ProductsPage() {
     }
     fetchData();
   }, []);
+
+  // Fetch fever orders when tab is active
+  useEffect(() => {
+    if (activeSource !== 'fever') return;
+
+    async function fetchOrders() {
+      setFeverOrdersLoading(true);
+      try {
+        const data = await getFeverOrders({
+          search: feverSearch,
+          status: feverStatusFilter,
+          plan: feverPlanFilter,
+        });
+        setFeverOrders(data);
+      } catch (error) {
+        console.error('Failed to fetch fever orders:', error);
+      } finally {
+        setFeverOrdersLoading(false);
+      }
+    }
+
+    const debounce = setTimeout(fetchOrders, 300);
+    return () => clearTimeout(debounce);
+  }, [activeSource, feverSearch, feverStatusFilter, feverPlanFilter]);
+
+  const toggleOrderExpanded = (orderId: string) => {
+    setExpandedOrders((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const formatDateRange = (start: string | null, end: string | null) => {
+    if (!start) return '-';
+    const startDate = new Date(start);
+    const endDate = end ? new Date(end) : null;
+    const startStr = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (!endDate) return startStr;
+    const endStr = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${startStr} - ${endStr}`;
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -534,38 +598,365 @@ export default function ProductsPage() {
               </div>
             )}
 
-            {/* Fever Sales by Plan - Full Width Table */}
-            {feverMetrics && Object.keys(feverMetrics.revenueByPlan).length > 0 && (
-              <Card>
-                <CardHeader className="pb-3 md:pb-4">
-                  <CardTitle className="text-base md:text-lg">Sales by Plan</CardTitle>
+            {/* Sales by Product Type - Full Width Table */}
+            {feverOrders && (
+              <Card className="mb-6">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Sales by Product</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Plan Name</TableHead>
-                        <TableHead className="text-right">Tickets</TableHead>
-                        <TableHead className="text-right">Revenue</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {Object.entries(feverMetrics.revenueByPlan)
-                        .sort(([, a], [, b]) => b.revenue - a.revenue)
-                        .map(([planId, data]) => (
-                          <TableRow key={planId}>
-                            <TableCell className="font-medium">{data.planName}</TableCell>
-                            <TableCell className="text-right text-purple-600">{data.count}</TableCell>
-                            <TableCell className="text-right font-semibold text-purple-600">
-                              {formatCurrency(data.revenue)}
-                            </TableCell>
+                  {(() => {
+                    const bySession = feverOrders.orders.reduce((acc, order) => {
+                      for (const item of order.items) {
+                        if (item.status !== 'purchased') continue;
+                        const name = item.session_name || 'Unknown';
+                        if (!acc[name]) acc[name] = { count: 0, revenue: 0, isAddon: item.session_is_addon };
+                        acc[name].count++;
+                        acc[name].revenue += (item.unitary_price || 0) + (item.surcharge || 0);
+                      }
+                      return acc;
+                    }, {} as Record<string, { count: number; revenue: number; isAddon: boolean | null }>);
+
+                    const sorted = Object.entries(bySession).sort(([, a], [, b]) => b.revenue - a.revenue);
+                    const totalRevenue = sorted.reduce((sum, [, d]) => sum + d.revenue, 0);
+                    const totalCount = sorted.reduce((sum, [, d]) => sum + d.count, 0);
+
+                    return (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Product</TableHead>
+                            <TableHead className="text-center w-20">Type</TableHead>
+                            <TableHead className="text-right w-24">Qty</TableHead>
+                            <TableHead className="text-right w-32">Revenue</TableHead>
+                            <TableHead className="text-right w-20">%</TableHead>
                           </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {sorted.map(([name, data]) => (
+                            <TableRow key={name}>
+                              <TableCell className="font-medium text-sm">{name}</TableCell>
+                              <TableCell className="text-center">
+                                {data.isAddon ? (
+                                  <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+                                    Addon
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    Ticket
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right text-purple-600">{data.count}</TableCell>
+                              <TableCell className="text-right font-semibold text-purple-600">
+                                {formatCurrency(data.revenue)}
+                              </TableCell>
+                              <TableCell className="text-right text-zinc-500 text-sm">
+                                {totalRevenue > 0 ? `${((data.revenue / totalRevenue) * 100).toFixed(1)}%` : '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="border-t-2 font-semibold">
+                            <TableCell>Total</TableCell>
+                            <TableCell></TableCell>
+                            <TableCell className="text-right text-purple-700">{totalCount}</TableCell>
+                            <TableCell className="text-right text-purple-700">{formatCurrency(totalRevenue)}</TableCell>
+                            <TableCell className="text-right">100%</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             )}
+
+            {/* Sales by Plan */}
+            {feverMetrics && Object.keys(feverMetrics.revenueByPlan).length > 0 && (
+              <Card className="mb-6">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm text-zinc-500">Sales by Plan</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {Object.entries(feverMetrics.revenueByPlan)
+                      .sort(([, a], [, b]) => b.revenue - a.revenue)
+                      .map(([planId, data]) => (
+                        <div key={planId} className="flex items-center justify-between py-1">
+                          <div className="font-medium text-sm">{data.planName}</div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm text-zinc-500">{data.count} tickets</span>
+                            <span className="font-semibold text-purple-600 w-24 text-right">
+                              {formatCurrency(data.revenue)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Secondary Stats Row */}
+            {feverOrders && (
+              <div className="grid gap-4 md:grid-cols-3 mb-6">
+                {/* By Payment Method */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-zinc-500 flex items-center gap-1">
+                      <CreditCard className="h-4 w-4" /> Payment Methods
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const byMethod = feverOrders.orders.reduce((acc, order) => {
+                        const method = order.payment_method || 'Unknown';
+                        if (!acc[method]) acc[method] = 0;
+                        acc[method]++;
+                        return acc;
+                      }, {} as Record<string, number>);
+
+                      return (
+                        <div className="space-y-1.5">
+                          {Object.entries(byMethod)
+                            .sort(([, a], [, b]) => b - a)
+                            .slice(0, 5)
+                            .map(([method, count]) => (
+                              <div key={method} className="flex justify-between text-sm">
+                                <span className="text-zinc-600 truncate">{method}</span>
+                                <span className="font-medium">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+
+                {/* By Country */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-zinc-500 flex items-center gap-1">
+                      <MapPin className="h-4 w-4" /> Top Countries
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const byCountry = feverOrders.orders.reduce((acc, order) => {
+                        const country = order.purchase_country || 'Unknown';
+                        if (!acc[country]) acc[country] = 0;
+                        acc[country]++;
+                        return acc;
+                      }, {} as Record<string, number>);
+
+                      return (
+                        <div className="space-y-1.5">
+                          {Object.entries(byCountry)
+                            .sort(([, a], [, b]) => b - a)
+                            .slice(0, 5)
+                            .map(([country, count]) => (
+                              <div key={country} className="flex justify-between text-sm">
+                                <span className="text-zinc-600">{country}</span>
+                                <span className="font-medium">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+
+                {/* Status Breakdown */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-zinc-500 flex items-center gap-1">
+                      <Ticket className="h-4 w-4" /> Item Status
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const byStatus = feverOrders.orders.reduce((acc, order) => {
+                        for (const item of order.items) {
+                          const status = item.status || 'unknown';
+                          if (!acc[status]) acc[status] = 0;
+                          acc[status]++;
+                        }
+                        return acc;
+                      }, {} as Record<string, number>);
+
+                      return (
+                        <div className="space-y-1.5">
+                          {Object.entries(byStatus)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([status, count]) => (
+                              <div key={status} className="flex justify-between text-sm">
+                                <span className={cn(
+                                  'capitalize',
+                                  status === 'purchased' ? 'text-emerald-600' :
+                                  status === 'cancelled' ? 'text-red-600' : 'text-zinc-600'
+                                )}>{status}</span>
+                                <span className="font-medium">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Orders Section - Collapsible */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Orders ({feverOrders?.total || 0})</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExpandedOrders(new Set())}
+                    className="text-xs"
+                  >
+                    Collapse All
+                  </Button>
+                </div>
+                {/* Search and Filters */}
+                <div className="flex flex-col md:flex-row gap-2 mt-3">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                    <Input
+                      placeholder="Search email, name, order ID..."
+                      value={feverSearch}
+                      onChange={(e) => setFeverSearch(e.target.value)}
+                      className="pl-9 pr-9 h-9 text-sm"
+                    />
+                    {feverSearch && (
+                      <button
+                        onClick={() => setFeverSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    value={feverStatusFilter}
+                    onChange={(e) => setFeverStatusFilter(e.target.value)}
+                    className="px-3 py-1.5 border rounded-md text-sm bg-white h-9"
+                  >
+                    <option value="">All Status</option>
+                    <option value="purchased">Purchased</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {feverOrdersLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-16 bg-zinc-100 animate-pulse rounded" />
+                    ))}
+                  </div>
+                ) : feverOrders?.orders.length === 0 ? (
+                  <div className="py-8 text-center text-zinc-500">No orders found</div>
+                ) : (
+                  <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
+                    {feverOrders?.orders.slice(0, 100).map((order) => {
+                      const isExpanded = expandedOrders.has(order.fever_order_id);
+                      const buyerName = [order.buyer_first_name, order.buyer_last_name]
+                        .filter(Boolean)
+                        .join(' ') || 'Unknown';
+
+                      return (
+                        <div key={order.fever_order_id} className="border rounded bg-white">
+                          <button
+                            onClick={() => toggleOrderExpanded(order.fever_order_id)}
+                            className="w-full px-3 py-2 text-left hover:bg-zinc-50 transition-colors"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex-1 min-w-0 flex items-center gap-3">
+                                <span className="font-mono text-xs text-zinc-400">
+                                  #{order.fever_order_id.slice(-6)}
+                                </span>
+                                <span className="font-medium text-sm truncate">{buyerName}</span>
+                                <span className="text-xs text-zinc-500 truncate hidden md:inline">
+                                  {order.buyer_email}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 flex-shrink-0">
+                                <span className="text-xs text-zinc-400">
+                                  {formatDate(order.order_created_at)}
+                                </span>
+                                <span className="font-semibold text-sm text-purple-600">
+                                  {formatCurrency(order.total_value)}
+                                </span>
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4 text-zinc-400" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-zinc-400" />
+                                )}
+                              </div>
+                            </div>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="border-t px-3 py-3 bg-zinc-50 space-y-3 text-sm">
+                              {/* Items */}
+                              <div className="space-y-1.5">
+                                {order.items.map((item) => (
+                                  <div key={item.fever_item_id} className="bg-white rounded p-2 border flex items-center justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium text-sm truncate">{item.session_name}</div>
+                                      <div className="text-xs text-zinc-500 flex items-center gap-2">
+                                        <span>{formatDateRange(item.session_start, item.session_end)}</span>
+                                        <Badge variant="outline" className={cn('text-[10px]',
+                                          item.status === 'purchased' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                                        )}>{item.status}</Badge>
+                                        {item.session_is_addon && <Badge variant="outline" className="text-[10px]">Addon</Badge>}
+                                      </div>
+                                      {item.plan_code_barcode && (
+                                        <div className="text-[10px] text-zinc-400 font-mono mt-1">{item.plan_code_barcode}</div>
+                                      )}
+                                    </div>
+                                    <div className="font-semibold text-purple-600">
+                                      {formatCurrency((item.unitary_price || 0) + (item.surcharge || 0))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Buyer & Meta */}
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+                                {order.purchase_city && <span><MapPin className="h-3 w-3 inline" /> {order.purchase_city}, {order.purchase_country}</span>}
+                                {order.payment_method && <span><CreditCard className="h-3 w-3 inline" /> {order.payment_method}</span>}
+                                {order.coupon_code && <span className="text-emerald-600"><Tag className="h-3 w-3 inline" /> {order.coupon_code}</span>}
+                              </div>
+
+                              {/* Booking Questions */}
+                              {order.booking_questions && Array.isArray(order.booking_questions) && order.booking_questions.length > 0 && (
+                                <div className="text-xs space-y-1 pt-2 border-t">
+                                  {(order.booking_questions as Array<{question: string; answers: string[]}>).map((q, i) => (
+                                    <div key={i} className="flex gap-2">
+                                      <span className="text-zinc-400">{q.question}:</span>
+                                      <span>{q.answers?.join(', ')}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {(feverOrders?.orders.length || 0) > 100 && (
+                      <div className="text-center text-xs text-zinc-500 py-2">
+                        Showing first 100 of {feverOrders?.orders.length} orders
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </>
         )}
       </div>

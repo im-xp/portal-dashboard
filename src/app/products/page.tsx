@@ -653,11 +653,11 @@ export default function ProductsPage() {
 
                     return (
                       <>
-                        <div className="flex gap-1 mb-4 bg-zinc-100 p-1 rounded-lg w-fit">
+                        <div className="flex gap-1 mb-4 bg-zinc-100 p-1 rounded-lg overflow-x-auto">
                           <button
                             onClick={() => { setSalesByProductFilter('all'); setSalesByProductExpanded(false); }}
                             className={cn(
-                              'px-3 py-1 rounded-md text-sm font-medium transition-colors',
+                              'px-2 md:px-3 py-1 rounded-md text-xs md:text-sm font-medium transition-colors whitespace-nowrap',
                               salesByProductFilter === 'all'
                                 ? 'bg-white text-zinc-900 shadow-sm'
                                 : 'text-zinc-600 hover:text-zinc-900'
@@ -670,7 +670,7 @@ export default function ProductsPage() {
                               key={type}
                               onClick={() => { setSalesByProductFilter(type); setSalesByProductExpanded(false); }}
                               className={cn(
-                                'px-3 py-1 rounded-md text-sm font-medium transition-colors',
+                                'px-2 md:px-3 py-1 rounded-md text-xs md:text-sm font-medium transition-colors whitespace-nowrap',
                                 salesByProductFilter === type
                                   ? 'bg-white text-zinc-900 shadow-sm'
                                   : 'text-zinc-600 hover:text-zinc-900'
@@ -682,20 +682,27 @@ export default function ProductsPage() {
                         </div>
                         <Table>
                           <TableHeader>
-                            <TableRow>
+                            <TableRow className="text-xs md:text-sm">
                               <TableHead>Product</TableHead>
-                              {salesByProductFilter === 'all' && <TableHead className="text-center w-20">Type</TableHead>}
-                              <TableHead className="text-right w-24">Qty</TableHead>
-                              <TableHead className="text-right w-32">Revenue</TableHead>
-                              <TableHead className="text-right w-20">%</TableHead>
+                              {salesByProductFilter === 'all' && <TableHead className="hidden md:table-cell text-center w-20">Type</TableHead>}
+                              <TableHead className="text-right w-16 md:w-24">Qty</TableHead>
+                              <TableHead className="text-right w-20 md:w-32">Revenue</TableHead>
+                              <TableHead className="hidden md:table-cell text-right w-20">%</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {displayed.map(([name, data]) => (
                               <TableRow key={name}>
-                                <TableCell className="font-medium text-sm">{name}</TableCell>
+                                <TableCell className="font-medium text-sm max-w-[140px] md:max-w-none">
+                                  <div className="truncate md:whitespace-normal">{name}</div>
+                                  {salesByProductFilter === 'all' && (
+                                    <Badge variant="outline" className={cn("text-[10px] mt-0.5 md:hidden", data.type === 'Addon' && 'bg-blue-50 text-blue-700 border-blue-200')}>
+                                      {data.type}
+                                    </Badge>
+                                  )}
+                                </TableCell>
                                 {salesByProductFilter === 'all' && (
-                                  <TableCell className="text-center">
+                                  <TableCell className="hidden md:table-cell text-center">
                                     {data.type === 'Addon' ? (
                                       <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
                                         Addon
@@ -711,7 +718,7 @@ export default function ProductsPage() {
                                 <TableCell className="text-right font-semibold text-purple-600">
                                   {formatCurrency(data.revenue)}
                                 </TableCell>
-                                <TableCell className="text-right text-zinc-500 text-sm">
+                                <TableCell className="hidden md:table-cell text-right text-zinc-500 text-sm">
                                   {totalRevenue > 0 ? `${((data.revenue / totalRevenue) * 100).toFixed(1)}%` : '-'}
                                 </TableCell>
                               </TableRow>
@@ -719,10 +726,10 @@ export default function ProductsPage() {
                             {salesByProductExpanded && (
                               <TableRow className="border-t-2 font-semibold">
                                 <TableCell>Total</TableCell>
-                                {salesByProductFilter === 'all' && <TableCell></TableCell>}
+                                {salesByProductFilter === 'all' && <TableCell className="hidden md:table-cell"></TableCell>}
                                 <TableCell className="text-right text-purple-700">{totalCount}</TableCell>
                                 <TableCell className="text-right text-purple-700">{formatCurrency(totalRevenue)}</TableCell>
-                                <TableCell className="text-right">100%</TableCell>
+                                <TableCell className="hidden md:table-cell text-right">100%</TableCell>
                               </TableRow>
                             )}
                           </TableBody>
@@ -762,11 +769,11 @@ export default function ProductsPage() {
                     return (
                       <div className="space-y-2">
                         {displayed.map(([planId, data]) => (
-                          <div key={planId} className="flex items-center justify-between py-1">
-                            <div className="font-medium text-sm">{data.planName}</div>
-                            <div className="flex items-center gap-4">
-                              <span className="text-sm text-zinc-500">{data.count} tickets</span>
-                              <span className="font-semibold text-purple-600 w-24 text-right">
+                          <div key={planId} className="flex flex-col md:flex-row md:items-center md:justify-between py-2 md:py-1">
+                            <div className="font-medium text-sm truncate">{data.planName}</div>
+                            <div className="flex items-center justify-between md:justify-end gap-3 md:gap-4 mt-1 md:mt-0">
+                              <span className="text-xs md:text-sm text-zinc-500">{data.count} tickets</span>
+                              <span className="font-semibold text-purple-600 text-sm md:w-24 text-right">
                                 {formatCurrency(data.revenue)}
                               </span>
                             </div>
@@ -981,10 +988,10 @@ export default function ProductsPage() {
                                 </span>
                               </div>
                               <div className="flex items-center gap-3 flex-shrink-0">
-                                <span className="text-xs text-zinc-400">
+                                <span className="text-[10px] md:text-xs text-zinc-400 hidden sm:inline">
                                   {formatDate(order.order_created_at)}
                                 </span>
-                                <span className="font-semibold text-sm text-purple-600">
+                                <span className="font-semibold text-xs md:text-sm text-purple-600">
                                   {formatCurrency(order.total_value)}
                                 </span>
                                 {isExpanded ? (
@@ -1001,23 +1008,30 @@ export default function ProductsPage() {
                               {/* Items */}
                               <div className="space-y-1.5">
                                 {order.items.map((item) => (
-                                  <div key={item.fever_item_id} className="bg-white rounded p-2 border flex items-center justify-between gap-2">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="font-medium text-sm truncate">{item.session_name}</div>
-                                      <div className="text-xs text-zinc-500 flex items-center gap-2">
-                                        <span>{formatDateRange(item.session_start, item.session_end)}</span>
-                                        <Badge variant="outline" className={cn('text-[10px]',
-                                          item.status === 'purchased' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-                                        )}>{item.status}</Badge>
-                                        {item.session_is_addon && <Badge variant="outline" className="text-[10px]">Addon</Badge>}
+                                  <div key={item.fever_item_id} className="bg-white rounded p-2 border">
+                                    {/* Row 1: Name + Price */}
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="font-medium text-sm truncate flex-1 min-w-0">{item.session_name}</div>
+                                      <div className="font-semibold text-purple-600 flex-shrink-0">
+                                        {formatCurrency((item.unitary_price || 0) + (item.surcharge || 0))}
                                       </div>
-                                      {item.plan_code_barcode && (
-                                        <div className="text-[10px] text-zinc-400 font-mono mt-1">{item.plan_code_barcode}</div>
-                                      )}
                                     </div>
-                                    <div className="font-semibold text-purple-600">
-                                      {formatCurrency((item.unitary_price || 0) + (item.surcharge || 0))}
+
+                                    {/* Row 2: Badges */}
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs text-zinc-500">
+                                      <span className="truncate max-w-[120px] md:max-w-none">
+                                        {formatDateRange(item.session_start, item.session_end)}
+                                      </span>
+                                      <Badge variant="outline" className={cn('text-[10px]',
+                                        item.status === 'purchased' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                                      )}>{item.status}</Badge>
+                                      {item.session_is_addon && <Badge variant="outline" className="text-[10px]">Addon</Badge>}
                                     </div>
+
+                                    {/* Row 3: Barcode */}
+                                    {item.plan_code_barcode && (
+                                      <div className="text-[10px] text-zinc-400 font-mono mt-1">{item.plan_code_barcode}</div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -1033,7 +1047,7 @@ export default function ProductsPage() {
                               {order.booking_questions && Array.isArray(order.booking_questions) && order.booking_questions.length > 0 && (
                                 <div className="text-xs space-y-1 pt-2 border-t">
                                   {(order.booking_questions as Array<{question: string; answers: string[]}>).map((q, i) => (
-                                    <div key={i} className="flex gap-2">
+                                    <div key={i} className="flex flex-col md:flex-row md:gap-2">
                                       <span className="text-zinc-400">{q.question}:</span>
                                       <span>{q.answers?.join(', ')}</span>
                                     </div>

@@ -9,9 +9,6 @@
  */
 
 const FEVER_HOST = process.env.FEVER_HOST || 'data-reporting-api.prod.feverup.com';
-const FEVER_USERNAME = process.env.FEVER_USERNAME || '';
-const FEVER_PASSWORD = process.env.FEVER_PASSWORD || '';
-const FEVER_PLAN_IDS = process.env.FEVER_PLAN_IDS || '';
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60;
@@ -319,17 +316,17 @@ function transformItem(apiItem: FeverApiItem, orderId: string): FeverOrderItem {
 }
 
 async function getAuthToken(): Promise<string> {
-  if (!FEVER_USERNAME || !FEVER_PASSWORD) {
+  const username = process.env.FEVER_USERNAME;
+  const password = process.env.FEVER_PASSWORD;
+
+  if (!username || !password) {
     throw new Error('FEVER_USERNAME and FEVER_PASSWORD env vars required');
   }
 
   const response = await fetch(`https://${FEVER_HOST}/v1/auth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      username: FEVER_USERNAME,
-      password: FEVER_PASSWORD,
-    }),
+    body: new URLSearchParams({ username, password }),
   });
 
   if (!response.ok) {
@@ -348,7 +345,9 @@ async function startSearch(
   token: string,
   options?: { dateFrom?: string; dateTo?: string }
 ): Promise<string> {
-  const planIds = FEVER_PLAN_IDS.split(',')
+  const planIdsEnv = process.env.FEVER_PLAN_IDS || '';
+  const planIds = planIdsEnv
+    .split(',')
     .map((id) => parseInt(id.trim(), 10))
     .filter((id) => !isNaN(id));
 

@@ -53,6 +53,8 @@ export default function ProductsPage() {
   const [salesByPlanExpanded, setSalesByPlanExpanded] = useState(false);
   const [salesByProductExpanded, setSalesByProductExpanded] = useState(false);
   const [salesByProductFilter, setSalesByProductFilter] = useState<string>('all');
+  const [ordersPage, setOrdersPage] = useState(0);
+  const ORDERS_PER_PAGE = 50;
 
   useEffect(() => {
     async function fetchData() {
@@ -83,6 +85,7 @@ export default function ProductsPage() {
 
     async function fetchOrders() {
       setFeverOrdersLoading(true);
+      setOrdersPage(0);
       try {
         const data = await getFeverOrders({
           search: feverSearch,
@@ -964,8 +967,34 @@ export default function ProductsPage() {
                 ) : feverOrders?.orders.length === 0 ? (
                   <div className="py-8 text-center text-zinc-500">No orders found</div>
                 ) : (
-                  <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
-                    {feverOrders?.orders.slice(0, 100).map((order) => {
+                  <>
+                    {/* Pagination */}
+                    {(feverOrders?.orders.length || 0) > ORDERS_PER_PAGE && (
+                      <div className="flex items-center gap-2 mb-3">
+                        {ordersPage > 0 && (
+                          <button
+                            onClick={() => setOrdersPage(p => p - 1)}
+                            className="px-2 py-0.5 text-xs rounded bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition-colors"
+                          >
+                            &laquo;
+                          </button>
+                        )}
+                        <span className="px-2 py-0.5 text-xs rounded bg-purple-600 text-white">
+                          {ordersPage * ORDERS_PER_PAGE + 1}-{Math.min((ordersPage + 1) * ORDERS_PER_PAGE, feverOrders?.orders.length || 0)}
+                        </span>
+                        {(ordersPage + 1) * ORDERS_PER_PAGE < (feverOrders?.orders.length || 0) && (
+                          <button
+                            onClick={() => setOrdersPage(p => p + 1)}
+                            className="px-2 py-0.5 text-xs rounded bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition-colors"
+                          >
+                            &raquo;
+                          </button>
+                        )}
+                        <span className="text-xs text-zinc-500 ml-auto">of {feverOrders?.orders.length}</span>
+                      </div>
+                    )}
+                    <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
+                    {feverOrders?.orders.slice(ordersPage * ORDERS_PER_PAGE, (ordersPage + 1) * ORDERS_PER_PAGE).map((order) => {
                       const isExpanded = expandedOrders.has(order.fever_order_id);
                       const buyerName = [order.buyer_first_name, order.buyer_last_name]
                         .filter(Boolean)
@@ -1059,12 +1088,8 @@ export default function ProductsPage() {
                         </div>
                       );
                     })}
-                    {(feverOrders?.orders.length || 0) > 100 && (
-                      <div className="text-center text-xs text-zinc-500 py-2">
-                        Showing first 100 of {feverOrders?.orders.length} orders
-                      </div>
-                    )}
-                  </div>
+                                      </div>
+                  </>
                 )}
               </CardContent>
             </Card>

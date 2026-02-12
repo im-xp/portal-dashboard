@@ -90,7 +90,7 @@ export interface Payment {
   id: number;
   application_id: number;
   external_id: string | null;
-  status: 'pending' | 'approved' | 'expired' | 'failed';
+  status: 'pending' | 'approved' | 'expired' | 'failed' | 'cancelled';
   amount: number;
   currency: string;
   rate: number | null;
@@ -101,6 +101,9 @@ export interface Payment {
   discount_value: number;
   group_id: number | null;
   edit_passes: boolean;
+  is_installment_plan: boolean;
+  installments_total: number | null;
+  installments_paid: number;
   created_at: string;
   updated_at: string;
   applications?: {
@@ -156,13 +159,21 @@ export type JourneyStage =
 
 // Extended types with joined data
 
+export interface AttendeeInstallmentInfo {
+  paymentId: number;
+  totalAmount: number;
+  installmentsPaid: number;
+  installmentsTotal: number | null;
+}
+
 export interface AttendeeWithProducts extends Attendee {
-  purchasedProducts: LinkedProduct[];  // From attendee_products (legacy/assigned)
-  soldProducts: AttendeeProductWithStatus[];      // From approved payments
-  inCartProducts: AttendeeProductWithStatus[];    // From pending payments
-  journeyStage: JourneyStage;          // Where they are in the conversion funnel
-  hasPass: boolean;                    // Has purchased a "month" category product
-  hasLodging: boolean;                 // Has purchased a "lodging" category product
+  purchasedProducts: LinkedProduct[];
+  soldProducts: AttendeeProductWithStatus[];
+  inCartProducts: AttendeeProductWithStatus[];
+  journeyStage: JourneyStage;
+  hasPass: boolean;
+  hasLodging: boolean;
+  installmentPlan: AttendeeInstallmentInfo | null;
 }
 
 export interface ApplicationWithDetails extends Application {
@@ -172,11 +183,12 @@ export interface ApplicationWithDetails extends Application {
 // Dashboard aggregate types
 
 export interface RevenueMetrics {
-  approvedRevenue: number;      // Actually paid
-  pendingRevenue: number;       // Checkout started but not completed
-  totalRevenue: number;         // Sum of both
+  approvedRevenue: number;
+  totalRevenue: number;
   approvedPaymentsCount: number;
-  pendingPaymentsCount: number;
+  installmentPlansActive: number;
+  installmentPlansCompleted: number;
+  installmentCommittedRevenue: number;
 }
 
 export interface ProductSaleRecord {
@@ -192,7 +204,6 @@ export interface DashboardMetrics {
   totalApplications: number;
   acceptedApplications: number;
   paidAttendees: number;        // Attendees with approved payments
-  pendingAttendees: number;     // Attendees with pending payments
   revenue: RevenueMetrics;
   applicationsByStatus: Record<string, number>;
   productSales: ProductSaleRecord[];

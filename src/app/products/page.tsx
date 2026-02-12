@@ -195,7 +195,6 @@ export default function ProductsPage() {
             soldQuantity: 0,
             inCheckoutQuantity: 0,
             approvedRevenue: 0,
-            pendingRevenue: 0,
             productName: pp.product_name,
             productCategory: pp.product_category,
           };
@@ -208,7 +207,6 @@ export default function ProductsPage() {
         soldQuantity: number;
         inCheckoutQuantity: number;
         approvedRevenue: number;
-        pendingRevenue: number;
         productName: string;
         productCategory: string;
       }>);
@@ -221,7 +219,6 @@ export default function ProductsPage() {
         soldQuantity: 0,
         inCheckoutQuantity: 0,
         approvedRevenue: 0,
-        pendingRevenue: 0,
       },
     })).sort((a, b) => (b.sales.approvedRevenue || 0) - (a.sales.approvedRevenue || 0));
   }, [filteredProducts, productPaymentData]);
@@ -247,7 +244,6 @@ export default function ProductsPage() {
             soldQuantity: 0,
             inCartQuantity: 0,
             approvedRevenue: 0,
-            pendingRevenue: 0
           };
         }
         const amount = pp.product_price * pp.quantity * pp.discountMultiplier;
@@ -258,7 +254,6 @@ export default function ProductsPage() {
         soldQuantity: number;
         inCartQuantity: number;
         approvedRevenue: number;
-        pendingRevenue: number;
       }>);
   }, [payments, filteredProducts]);
 
@@ -357,14 +352,14 @@ export default function ProductsPage() {
 
               <Card className="bg-amber-50 border-amber-200">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
-                  <CardTitle className="text-xs md:text-sm font-medium text-amber-700">Pending</CardTitle>
+                  <CardTitle className="text-xs md:text-sm font-medium text-amber-700">Installments</CardTitle>
                   <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-amber-600" />
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="text-xl md:text-3xl font-bold text-amber-900">
-                    {formatCurrency(edgeosData?.metrics?.revenue.pendingRevenue || 0)}
+                    {formatCurrency(edgeosData?.metrics?.revenue.installmentCommittedRevenue || 0)}
                   </div>
-                  <p className="text-xs md:text-sm text-amber-700 mt-1 hidden md:block">in checkout</p>
+                  <p className="text-xs md:text-sm text-amber-700 mt-1 hidden md:block">committed via plans</p>
                 </CardContent>
               </Card>
             </div>

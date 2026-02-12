@@ -7,6 +7,7 @@ import type {
   LinkedProduct,
   AttendeeWithProducts,
   AttendeeProductWithStatus,
+  AttendeeInstallmentInfo,
   ApplicationWithDetails,
   Payment,
   PaymentProduct,
@@ -147,41 +148,45 @@ async function nocoFetch<T>(endpoint: string, retries = 5): Promise<T> {
   throw new Error('NocoDB API: Max retries exceeded');
 }
 
+// Paginated fetcher - NocoDB caps at 100 records per page
+async function nocoFetchAll<T>(tableId: string, params = ''): Promise<T[]> {
+  const PAGE_SIZE = 100;
+  const all: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const sep = params ? '&' : '';
+    const response = await nocoFetch<NocoDBResponse<T>>(
+      `/tables/${tableId}/records?limit=${PAGE_SIZE}&offset=${offset}${sep}${params}`
+    );
+    all.push(...response.list);
+    if (response.pageInfo.isLastPage || response.list.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return all;
+}
+
 // Base fetchers
 
 export async function getApplications(): Promise<Application[]> {
-  const response = await nocoFetch<NocoDBResponse<Application>>(
-    `/tables/${TABLES.applications}/records?limit=500`
-  );
-  return response.list;
+  return nocoFetchAll<Application>(TABLES.applications);
 }
 
 export async function getAttendees(): Promise<Attendee[]> {
-  const response = await nocoFetch<NocoDBResponse<Attendee>>(
-    `/tables/${TABLES.attendees}/records?limit=500`
-  );
-  return response.list;
+  return nocoFetchAll<Attendee>(TABLES.attendees);
 }
 
 export async function getProducts(): Promise<Product[]> {
-  const response = await nocoFetch<NocoDBResponse<Product>>(
-    `/tables/${TABLES.products}/records?limit=500`
-  );
-  return response.list;
+  return nocoFetchAll<Product>(TABLES.products);
 }
 
 export async function getPayments(): Promise<Payment[]> {
-  const response = await nocoFetch<NocoDBResponse<Payment>>(
-    `/tables/${TABLES.payments}/records?limit=500`
-  );
-  return response.list;
+  return nocoFetchAll<Payment>(TABLES.payments);
 }
 
 export async function getPaymentProducts(): Promise<PaymentProduct[]> {
-  const response = await nocoFetch<NocoDBResponse<PaymentProduct>>(
-    `/tables/${TABLES.paymentProducts}/records?limit=500`
-  );
-  return response.list;
+  return nocoFetchAll<PaymentProduct>(TABLES.paymentProducts);
 }
 
 export async function getPopupCities(): Promise<PopupCity[]> {
@@ -243,22 +248,23 @@ export async function getDashboardData(): Promise<DashboardData> {
     return acc;
   }, {} as Record<number, PaymentProduct[]>);
 
-  // Create payments with products for status lookup
+  // Normalize installment fields (NocoDB may return null/undefined for new columns)
   const paymentsWithProducts: PaymentWithProducts[] = payments.map(payment => ({
     ...payment,
+    is_installment_plan: payment.is_installment_plan ?? false,
+    installments_paid: payment.installments_paid ?? 0,
+    installments_total: payment.installments_total ?? null,
     paymentProducts: paymentProductsByPayment[payment.id] || [],
   }));
 
-  // Build per-attendee product maps from payment data
-  // NOTE: We only track approved payments now. Pending payments in the DB are meaningless.
-  // inCartByAttendee is kept empty for future cart feature.
+  // Build per-attendee product maps and installment info from payment data
   const soldByAttendee = new Map<number, AttendeeProductWithStatus[]>();
   const inCartByAttendee = new Map<number, AttendeeProductWithStatus[]>();
+  const installmentByAttendee = new Map<number, AttendeeInstallmentInfo>();
 
   for (const payment of paymentsWithProducts) {
-    // Only process approved payments - pending payments are meaningless in current DB
     if (payment.status !== 'approved') continue;
-    
+
     for (const pp of payment.paymentProducts) {
       const existing = soldByAttendee.get(pp.attendee_id) || [];
       existing.push({
@@ -270,6 +276,15 @@ export async function getDashboardData(): Promise<DashboardData> {
         status: 'sold',
       });
       soldByAttendee.set(pp.attendee_id, existing);
+
+      if (payment.is_installment_plan && !installmentByAttendee.has(pp.attendee_id)) {
+        installmentByAttendee.set(pp.attendee_id, {
+          paymentId: payment.id,
+          totalAmount: payment.amount,
+          installmentsPaid: payment.installments_paid,
+          installmentsTotal: payment.installments_total,
+        });
+      }
     }
   }
 
@@ -302,7 +317,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     const sold = soldByAttendee.get(attendee.id) || [];
     const inCart = inCartByAttendee.get(attendee.id) || [];
     const { stage, hasPass, hasLodging } = calculateJourneyStage(sold, inCart);
-    
+
     return {
       ...attendee,
       purchasedProducts: productsMap.get(attendee.id) || [],
@@ -311,6 +326,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       journeyStage: stage,
       hasPass,
       hasLodging,
+      installmentPlan: installmentByAttendee.get(attendee.id) ?? null,
     };
   });
 
@@ -319,28 +335,36 @@ export async function getDashboardData(): Promise<DashboardData> {
   const acceptedApplications = applications.filter(a => a.status === 'accepted').length;
 
   // === REVENUE CALCULATIONS FROM PAYMENTS ===
-  // NOTE: Pending payments in DB are meaningless, so we only count approved payments.
-  // Pending metrics are hardcoded to 0 but kept in the structure for future cart feature.
 
   const approvedPayments = paymentsWithProducts.filter(p => p.status === 'approved');
-
   const approvedRevenue = approvedPayments.reduce((sum, p) => sum + p.amount, 0);
+
+  // Installment plan metrics
+  const approvedInstallmentPlans = approvedPayments.filter(p => p.is_installment_plan);
+  const activeInstallmentPlans = approvedInstallmentPlans.filter(
+    p => p.installments_total !== null && p.installments_paid < p.installments_total
+  );
+  const completedInstallmentPlans = approvedInstallmentPlans.filter(
+    p => p.installments_total !== null && p.installments_paid >= p.installments_total
+  );
+  const installmentCommittedRevenue = approvedInstallmentPlans.reduce(
+    (sum, p) => sum + p.amount, 0
+  );
 
   const revenue: RevenueMetrics = {
     approvedRevenue,
-    pendingRevenue: 0,  // Hardcoded - pending payments in DB are meaningless
     totalRevenue: approvedRevenue,
     approvedPaymentsCount: approvedPayments.length,
-    pendingPaymentsCount: 0,  // Hardcoded - pending payments in DB are meaningless
+    installmentPlansActive: activeInstallmentPlans.length,
+    installmentPlansCompleted: completedInstallmentPlans.length,
+    installmentCommittedRevenue,
   };
 
-  // Get attendee IDs with approved payments only
   const attendeeIdsWithApproved = new Set(
     approvedPayments.flatMap(p => p.paymentProducts.map(pp => pp.attendee_id))
   );
 
   const paidAttendees = attendeeIdsWithApproved.size;
-  const pendingAttendees = 0;  // Hardcoded - pending payments in DB are meaningless
 
   // === PRODUCT SALES AGGREGATION ===
   
@@ -437,7 +461,6 @@ export async function getDashboardData(): Promise<DashboardData> {
       totalApplications,
       acceptedApplications,
       paidAttendees,
-      pendingAttendees,
       revenue,
       applicationsByStatus,
       productSales,

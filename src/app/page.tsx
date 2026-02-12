@@ -6,7 +6,7 @@ import { MetricCard } from '@/components/dashboard/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, UserCheck, CreditCard, DollarSign, Clock, Percent, AlertCircle, RefreshCw, Ticket, ChevronDown } from 'lucide-react';
+import { Users, UserCheck, CreditCard, DollarSign, CalendarClock, Percent, AlertCircle, RefreshCw, Ticket, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getFeverMetrics, getFeverSyncState } from '@/lib/fever-client';
 import type { DashboardData, FeverMetrics, FeverSyncState } from '@/lib/types';
@@ -120,7 +120,7 @@ export default function DashboardPage() {
           <MetricCard
             title="Paid Attendees"
             value={metrics?.paidAttendees || 0}
-            subtitle={metrics?.pendingAttendees ? `+ ${metrics.pendingAttendees} pending` : 'From approved payments'}
+            subtitle="From approved payments"
             icon={<CreditCard className="h-5 w-5" />}
           />
           <MetricCard
@@ -152,7 +152,10 @@ export default function DashboardPage() {
                 {formatCurrency(metrics?.revenue.approvedRevenue || 0)}
               </div>
               <p className="text-xs md:text-sm text-emerald-600">
-                {metrics?.revenue.approvedPaymentsCount || 0} payments completed
+                {metrics?.revenue.approvedPaymentsCount || 0} payments
+                {(metrics?.revenue.installmentPlansActive || 0) > 0 && (
+                  <> ({metrics?.revenue.installmentPlansActive} on installment plans)</>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -207,16 +210,19 @@ export default function DashboardPage() {
           <Card className="bg-amber-50 border-amber-200">
             <CardHeader className="pb-1 md:pb-2">
               <CardTitle className="text-xs md:text-sm font-medium text-amber-700 flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Pending Payments
+                <CalendarClock className="h-4 w-4" />
+                Installment Plans
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="text-xl md:text-2xl font-bold text-amber-800">
-                {formatCurrency(metrics?.revenue.pendingRevenue || 0)}
+                {formatCurrency(metrics?.revenue.installmentCommittedRevenue || 0)}
               </div>
               <p className="text-xs md:text-sm text-amber-600">
-                {metrics?.revenue.pendingPaymentsCount || 0} checkouts in progress
+                {metrics?.revenue.installmentPlansActive || 0} active
+                {(metrics?.revenue.installmentPlansCompleted || 0) > 0 && (
+                  <>, {metrics?.revenue.installmentPlansCompleted} completed</>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -302,18 +308,25 @@ export default function DashboardPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-semibold">{formatCurrency(payment.amount)}</p>
-                      <Badge
-                        variant={payment.status === 'approved' ? 'default' : 'secondary'}
-                        className={`text-xs capitalize ${
-                          payment.status === 'approved'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : payment.status === 'pending'
-                            ? 'bg-amber-100 text-amber-700'
-                            : ''
-                        }`}
-                      >
-                        {payment.status}
-                      </Badge>
+                      <div className="flex items-center gap-1 justify-end mt-1">
+                        {payment.is_installment_plan && (
+                          <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+                            {payment.installments_paid}/{payment.installments_total ?? '?'}
+                          </Badge>
+                        )}
+                        <Badge
+                          variant={payment.status === 'approved' ? 'default' : 'secondary'}
+                          className={`text-xs capitalize ${
+                            payment.status === 'approved'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : payment.status === 'pending'
+                              ? 'bg-amber-100 text-amber-700'
+                              : ''
+                          }`}
+                        >
+                          {payment.status}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -368,7 +381,7 @@ export default function DashboardPage() {
           <div>
             <p className="text-sm font-medium text-blue-800">Revenue Calculation Note</p>
             <p className="text-sm text-blue-700 mt-1">
-              <strong>EdgeOS Revenue</strong> = Completed payments from popup city applications.
+              <strong>EdgeOS Revenue</strong> = Committed amount from approved payments (includes installment plans where collection is in progress).
               <strong> Fever Revenue</strong> = Ticket sales from Fever platform (synced every 5 min).
             </p>
           </div>

@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Package, X, CheckCircle2, ShoppingCart, AlertCircle, Clock } from 'lucide-react';
+import { Search, Package, X, CheckCircle2, ShoppingCart, AlertCircle, Clock, CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ApplicationWithDetails, AttendeeWithProducts, JourneyStage } from '@/lib/types';
 import { JourneyPipeline } from './JourneyPipeline';
@@ -163,10 +163,17 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
                         <TableCell className="font-medium text-sm md:text-base max-w-[100px] md:max-w-none truncate">{person.name}</TableCell>
                         <TableCell className="hidden md:table-cell text-zinc-500">{person.email}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={cn('gap-1 text-[10px] md:text-xs', config.className)}>
-                            <Icon className="h-3 w-3" />
-                            <span className="hidden md:inline">{config.label}</span>
-                          </Badge>
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className={cn('gap-1 text-[10px] md:text-xs', config.className)}>
+                              <Icon className="h-3 w-3" />
+                              <span className="hidden md:inline">{config.label}</span>
+                            </Badge>
+                            {person.installmentPlan && (
+                              <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200 hidden md:inline-flex">
+                                {person.installmentPlan.installmentsPaid}/{person.installmentPlan.installmentsTotal ?? '?'}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           {person.hasPass ? (
@@ -267,6 +274,43 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
                   {selectedPerson.check_in_code || 'Not assigned'}
                 </code>
               </div>
+
+              {/* Installment Plan */}
+              {selectedPerson.installmentPlan && (
+                <div>
+                  <p className="text-xs text-zinc-500 uppercase tracking-wide mb-2">Payment Plan</p>
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CalendarClock className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm font-medium text-amber-800">
+                        Installment Plan
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-amber-700">Progress</span>
+                      <span className="font-medium text-amber-800">
+                        {selectedPerson.installmentPlan.installmentsPaid} / {selectedPerson.installmentPlan.installmentsTotal ?? '?'} paid
+                      </span>
+                    </div>
+                    {selectedPerson.installmentPlan.installmentsTotal && (
+                      <div className="mt-2 h-2 rounded-full bg-amber-100">
+                        <div
+                          className="h-2 rounded-full bg-amber-500 transition-all"
+                          style={{
+                            width: `${Math.round((selectedPerson.installmentPlan.installmentsPaid / selectedPerson.installmentPlan.installmentsTotal) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-sm mt-2">
+                      <span className="text-amber-700">Total</span>
+                      <span className="font-medium text-amber-800">
+                        ${selectedPerson.installmentPlan.totalAmount.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Sold Products */}
               <div>

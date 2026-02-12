@@ -1,17 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/email/sync",
-      "schedule": "*/2 * * * *"
-    },
-    {
-      "path": "/api/cron/slack-digest",
-      "schedule": "0 14,22 * * *"
-    },
-    {
-      "path": "/api/cron/fever-sync",
-      "schedule": "*/5 * * * *"
-    }
-  ]
+  "crons": []
 }
 

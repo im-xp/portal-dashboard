@@ -20,14 +20,17 @@ export default function DashboardPage() {
   const [feverExpanded, setFeverExpanded] = useState(false);
 
   useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
+    async function fetchEdgeOS() {
       try {
         const edgeosRes = await fetch('/api/dashboard').then(r => r.json());
         setEdgeosData(edgeosRes);
       } catch (error) {
         console.error('Failed to fetch EdgeOS data:', error);
+      } finally {
+        setLoading(false);
       }
+    }
+    async function fetchFever() {
       try {
         const [feverM, feverS] = await Promise.all([
           getFeverMetrics(),
@@ -38,30 +41,22 @@ export default function DashboardPage() {
       } catch (error) {
         console.error('Failed to fetch Fever data:', error);
       }
-      setLoading(false);
     }
-    fetchData();
+    fetchEdgeOS();
+    fetchFever();
   }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    try {
-      const edgeosRes = await fetch('/api/dashboard').then(r => r.json());
-      setEdgeosData(edgeosRes);
-    } catch (error) {
-      console.error('Failed to refresh EdgeOS data:', error);
-    }
-    try {
-      const [feverM, feverS] = await Promise.all([
-        getFeverMetrics(),
-        getFeverSyncState(),
-      ]);
-      setFeverMetrics(feverM);
-      setFeverSync(feverS);
-    } catch (error) {
-      console.error('Failed to refresh Fever data:', error);
-    }
+    const edgeosP = fetch('/api/dashboard').then(r => r.json())
+      .then(res => setEdgeosData(res))
+      .catch(err => console.error('Failed to refresh EdgeOS data:', err));
+    const feverP = Promise.all([getFeverMetrics(), getFeverSyncState()])
+      .then(([feverM, feverS]) => { setFeverMetrics(feverM); setFeverSync(feverS); })
+      .catch(err => console.error('Failed to refresh Fever data:', err));
+    await edgeosP;
     setRefreshing(false);
+    await feverP;
   };
 
   const formatCurrency = (amount: number) =>

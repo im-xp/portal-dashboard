@@ -28,8 +28,8 @@ export default function ApplicationsPage() {
       setLoading(true);
       try {
         const [dashboardRes, citiesRes] = await Promise.all([
-          fetch('/api/dashboard').then(r => r.json()),
-          fetch('/api/popup-cities').then(r => r.json()),
+          fetch('/api/dashboard').then(r => { if (!r.ok) throw new Error(`Dashboard API ${r.status}`); return r.json(); }),
+          fetch('/api/popup-cities').then(r => { if (!r.ok) throw new Error(`Popup cities API ${r.status}`); return r.json(); }),
         ]);
         setData(dashboardRes);
         setCities(citiesRes);

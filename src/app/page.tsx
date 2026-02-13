@@ -16,16 +16,20 @@ export default function DashboardPage() {
   const [feverMetrics, setFeverMetrics] = useState<FeverMetrics | null>(null);
   const [feverSync, setFeverSync] = useState<FeverSyncState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [feverExpanded, setFeverExpanded] = useState(false);
 
   useEffect(() => {
     async function fetchEdgeOS() {
       try {
-        const edgeosRes = await fetch('/api/dashboard').then(r => r.json());
-        setEdgeosData(edgeosRes);
-      } catch (error) {
-        console.error('Failed to fetch EdgeOS data:', error);
+        const res = await fetch('/api/dashboard');
+        if (!res.ok) throw new Error(`Dashboard API ${res.status}`);
+        setEdgeosData(await res.json());
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch EdgeOS data:', err);
+        setError('Failed to load EdgeOS data');
       } finally {
         setLoading(false);
       }
@@ -48,9 +52,16 @@ export default function DashboardPage() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    const edgeosP = fetch('/api/dashboard').then(r => r.json())
-      .then(res => setEdgeosData(res))
-      .catch(err => console.error('Failed to refresh EdgeOS data:', err));
+    setError(null);
+    const edgeosP = fetch('/api/dashboard')
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Dashboard API ${res.status}`);
+        setEdgeosData(await res.json());
+      })
+      .catch(err => {
+        console.error('Failed to refresh EdgeOS data:', err);
+        setError('Failed to load EdgeOS data');
+      });
     const feverP = Promise.all([getFeverMetrics(), getFeverSyncState()])
       .then(([feverM, feverS]) => { setFeverMetrics(feverM); setFeverSync(feverS); })
       .catch(err => console.error('Failed to refresh Fever data:', err));
@@ -106,6 +117,16 @@ export default function DashboardPage() {
       />
 
       <div className="p-4 md:p-8">
+        {error && !edgeosData && (
+          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-4 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />
+            <span className="text-sm text-red-700">{error}</span>
+            <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing} className="ml-auto">
+              <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+              Retry
+            </Button>
+          </div>
+        )}
         {/* Key Metrics */}
         <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
           <MetricCard

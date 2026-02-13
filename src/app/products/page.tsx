@@ -61,10 +61,10 @@ export default function ProductsPage() {
       setLoading(true);
       try {
         const [edgeosRes, feverM, feverS, citiesRes] = await Promise.all([
-          fetch('/api/dashboard').then(r => r.json()),
+          fetch('/api/dashboard').then(r => { if (!r.ok) throw new Error(`Dashboard API ${r.status}`); return r.json(); }),
           getFeverMetrics(),
           getFeverSyncState(),
-          fetch('/api/popup-cities').then(r => r.json()),
+          fetch('/api/popup-cities').then(r => { if (!r.ok) throw new Error(`Popup cities API ${r.status}`); return r.json(); }),
         ]);
         setEdgeosData(edgeosRes);
         setFeverMetrics(feverM);
@@ -139,7 +139,7 @@ export default function ProductsPage() {
     setRefreshing(true);
     try {
       const [edgeosRes, feverM, feverS] = await Promise.all([
-        fetch('/api/dashboard').then(r => r.json()),
+        fetch('/api/dashboard').then(r => { if (!r.ok) throw new Error(`Dashboard API ${r.status}`); return r.json(); }),
         getFeverMetrics(),
         getFeverSyncState(),
       ]);

@@ -52,7 +52,7 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Redis cache with TTL (shared across all serverless instances)
 const CACHE_TTL = 600; // 10 minutes fresh
-const STALE_TTL = 1800; // 30 minutes stale fallback
+const STALE_TTL = 3600; // 1 hour stale fallback (safety net for NocoDB outages)
 const REDIS_URL = process.env.REDIS_URL;
 
 let redisClient: RedisClientType | null = null;
@@ -126,8 +126,12 @@ export async function clearCache(): Promise<void> {
   }
 }
 
+const FETCH_TIMEOUT = 5000;
+
 async function nocoFetch<T>(endpoint: string, retries = 1): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
     try {
       const res = await fetch(`${NOCODB_URL}${endpoint}`, {
         headers: {
@@ -135,6 +139,7 @@ async function nocoFetch<T>(endpoint: string, retries = 1): Promise<T> {
           'Content-Type': 'application/json',
         },
         cache: 'no-store',
+        signal: controller.signal,
       });
 
       if (res.status === 429) {
@@ -155,8 +160,16 @@ async function nocoFetch<T>(endpoint: string, retries = 1): Promise<T> {
 
       return res.json();
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        const wrapped = new Error(`NocoDB timeout on ${endpoint} (${FETCH_TIMEOUT}ms)`);
+        if (attempt === retries) throw wrapped;
+        await delay(1000 * (attempt + 1));
+        continue;
+      }
       if (attempt === retries) throw error;
-      await delay(1000);
+      await delay(1000 * (attempt + 1));
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw new Error('NocoDB API: Max retries exceeded');
@@ -227,7 +240,7 @@ export async function getPopupCities(): Promise<PopupCity[]> {
   return cities;
 }
 
-// Dashboard data fetcher (aggregates everything)
+// Dashboard data fetcher with stale-while-revalidate
 
 export async function getDashboardData(): Promise<DashboardData> {
   const cacheKey = 'dashboard-data';
@@ -235,29 +248,60 @@ export async function getDashboardData(): Promise<DashboardData> {
   const cached = await getCached<DashboardData>(cacheKey);
   if (cached) return cached;
 
-  try {
-    const data = await fetchFreshDashboardData();
-    await setCache(cacheKey, data);
-    return data;
-  } catch (error) {
-    console.error('Fresh dashboard fetch failed, trying stale cache:', error);
-    const stale = await getStaleCached<DashboardData>(cacheKey);
-    if (stale) {
-      console.log('Serving stale dashboard data');
-      return stale;
-    }
-    throw error;
+  const stale = await getStaleCached<DashboardData>(cacheKey);
+  if (stale) {
+    triggerBackgroundRefresh();
+    return stale;
   }
+
+  return refreshDashboardCache();
+}
+
+async function triggerBackgroundRefresh(): Promise<void> {
+  try {
+    const redis = await getRedis();
+    if (!redis) return;
+    const locked = await redis.set('dashboard-refresh-lock', '1', { NX: true, EX: 30 });
+    if (!locked) return;
+    refreshDashboardCache().catch(err =>
+      console.error('Background dashboard refresh failed:', err)
+    );
+  } catch {
+    // Lock acquisition failed, skip
+  }
+}
+
+export async function refreshDashboardCache(): Promise<DashboardData> {
+  const data = await fetchFreshDashboardData();
+  await setCache('dashboard-data', data);
+  return data;
 }
 
 async function fetchFreshDashboardData(): Promise<DashboardData> {
   console.log('Fetching fresh dashboard data...');
 
-  const applications = await getApplications();
-  const attendees = await getAttendees();
-  const products = await getProducts();
-  const payments = await getPayments();
-  const paymentProducts = await getPaymentProducts();
+  const results = await Promise.allSettled([
+    getApplications(),
+    getAttendees(),
+    getProducts(),
+    getPayments(),
+    getPaymentProducts(),
+  ]);
+
+  const failures = results.filter(r => r.status === 'rejected');
+  if (failures.length > 0) {
+    console.error(`NocoDB: ${failures.length}/5 tables failed:`,
+      failures.map(f => (f as PromiseRejectedResult).reason?.message));
+  }
+  if (failures.length === results.length) {
+    throw new Error('All NocoDB tables failed to fetch');
+  }
+
+  const applications = results[0].status === 'fulfilled' ? results[0].value : [];
+  const attendees = results[1].status === 'fulfilled' ? results[1].value : [];
+  const products = results[2].status === 'fulfilled' ? results[2].value : [];
+  const payments = results[3].status === 'fulfilled' ? results[3].value : [];
+  const paymentProducts = results[4].status === 'fulfilled' ? results[4].value : [];
 
   const productsMap = new Map<number, LinkedProduct[]>();
   

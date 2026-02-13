@@ -51,7 +51,8 @@ const TABLES = {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Redis cache with TTL (shared across all serverless instances)
-const CACHE_TTL = 120; // 2 minutes in seconds
+const CACHE_TTL = 600; // 10 minutes fresh
+const STALE_TTL = 1800; // 30 minutes stale fallback
 const REDIS_URL = process.env.REDIS_URL;
 
 let redisClient: RedisClientType | null = null;
@@ -90,9 +91,25 @@ async function setCache<T>(key: string, data: T): Promise<void> {
   try {
     const redis = await getRedis();
     if (!redis) return;
-    await redis.setEx(key, CACHE_TTL, JSON.stringify(data));
+    const json = JSON.stringify(data);
+    await Promise.all([
+      redis.setEx(key, CACHE_TTL, json),
+      redis.setEx(`${key}:stale`, STALE_TTL, json),
+    ]);
   } catch (e) {
     console.error('Cache set failed:', e);
+  }
+}
+
+async function getStaleCached<T>(key: string): Promise<T | null> {
+  try {
+    const redis = await getRedis();
+    if (!redis) return null;
+    const data = await redis.get(`${key}:stale`);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error('Stale cache get failed:', e);
+    return null;
   }
 }
 
@@ -100,14 +117,17 @@ export async function clearCache(): Promise<void> {
   try {
     const redis = await getRedis();
     if (!redis) return;
-    await redis.del(['dashboard-data', 'popup-cities']);
+    await redis.del([
+      'dashboard-data', 'dashboard-data:stale',
+      'popup-cities', 'popup-cities:stale',
+    ]);
   } catch (e) {
     console.error('Cache clear failed:', e);
   }
 }
 
-async function nocoFetch<T>(endpoint: string, retries = 5): Promise<T> {
-  for (let attempt = 0; attempt < retries; attempt++) {
+async function nocoFetch<T>(endpoint: string, retries = 1): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(`${NOCODB_URL}${endpoint}`, {
         headers: {
@@ -118,16 +138,11 @@ async function nocoFetch<T>(endpoint: string, retries = 5): Promise<T> {
       });
 
       if (res.status === 429) {
-        // Rate limited - exponential backoff
-        const waitTime = 1000 * Math.pow(2, attempt);
-        console.log(`Rate limited on ${endpoint}, waiting ${waitTime}ms (attempt ${attempt + 1})`);
-        await delay(waitTime);
-        continue;
+        throw new Error(`NocoDB rate limited on ${endpoint}`);
       }
 
       if (!res.ok) {
         const text = await res.text();
-        // Provide helpful diagnosis for common errors
         if (res.status === 404) {
           throw new Error(
             `NocoDB API error: 404 Not Found - ${text}\n` +
@@ -140,9 +155,8 @@ async function nocoFetch<T>(endpoint: string, retries = 5): Promise<T> {
 
       return res.json();
     } catch (error) {
-      console.error(`Fetch attempt ${attempt + 1} failed for ${endpoint}:`, error);
-      if (attempt === retries - 1) throw error;
-      await delay(1000 * Math.pow(2, attempt));
+      if (attempt === retries) throw error;
+      await delay(1000);
     }
   }
   throw new Error('NocoDB API: Max retries exceeded');
@@ -216,27 +230,35 @@ export async function getPopupCities(): Promise<PopupCity[]> {
 // Dashboard data fetcher (aggregates everything)
 
 export async function getDashboardData(): Promise<DashboardData> {
-  // Check cache first
   const cacheKey = 'dashboard-data';
-  const cached = await getCached<DashboardData>(cacheKey);
-  if (cached) {
-    console.log('Using cached dashboard data');
-    return cached;
-  }
 
+  const cached = await getCached<DashboardData>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const data = await fetchFreshDashboardData();
+    await setCache(cacheKey, data);
+    return data;
+  } catch (error) {
+    console.error('Fresh dashboard fetch failed, trying stale cache:', error);
+    const stale = await getStaleCached<DashboardData>(cacheKey);
+    if (stale) {
+      console.log('Serving stale dashboard data');
+      return stale;
+    }
+    throw error;
+  }
+}
+
+async function fetchFreshDashboardData(): Promise<DashboardData> {
   console.log('Fetching fresh dashboard data...');
 
-  // Fetch data sequentially to avoid NocoDB rate limits
   const applications = await getApplications();
   const attendees = await getAttendees();
   const products = await getProducts();
   const payments = await getPayments();
   const paymentProducts = await getPaymentProducts();
-  
-  // NOTE: We skip fetching attendee_products (linked products) because:
-  // 1. It requires N API calls (one per attendee) which is too slow
-  // 2. payment_products already contains all purchased product data
-  // 3. attendee_products is legacy/manual assignment data
+
   const productsMap = new Map<number, LinkedProduct[]>();
   
   // Group payment products by payment_id first (need this for payment status)
@@ -456,7 +478,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     attendeesList: attendeesByApp[app.id] || [],
   }));
 
-  const result = {
+  return {
     metrics: {
       totalApplications,
       acceptedApplications,
@@ -471,10 +493,4 @@ export async function getDashboardData(): Promise<DashboardData> {
     products,
     payments: paymentsWithProducts,
   };
-
-  // Cache the result
-  await setCache(cacheKey, result);
-  console.log('Dashboard data cached');
-
-  return result;
 }

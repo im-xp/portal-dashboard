@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/warm-cache",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/fever-sync",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

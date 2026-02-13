@@ -16,7 +16,7 @@ import { Package, DollarSign, TrendingUp, Ticket, RefreshCw, ChevronDown, Chevro
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { getFeverMetrics, getFeverSyncState, getFeverOrders } from '@/lib/fever-client';
+import { getFeverMetrics, getFeverSyncState, getFeverOrders, triggerFeverSync } from '@/lib/fever-client';
 import type { DashboardData, FeverMetrics, FeverSyncState, FeverOrderWithItems, FeverOrdersResponse, Product, PaymentWithProducts, PopupCity } from '@/lib/types';
 
 type ActiveSource = 'edgeos' | 'fever';
@@ -39,6 +39,7 @@ export default function ProductsPage() {
   const [cities, setCities] = useState<PopupCity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [activeSource, setActiveSource] = useState<ActiveSource>('edgeos');
   const [selectedCityId, setSelectedCityId] = useState<number | null>(null);
   const [feverExpanded, setFeverExpanded] = useState(false);
@@ -149,6 +150,19 @@ export default function ProductsPage() {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const handleFeverSync = async () => {
+    setSyncing(true);
+    const result = await triggerFeverSync();
+    if (result.success) {
+      const [feverM, feverS] = await Promise.all([getFeverMetrics(), getFeverSyncState()]);
+      setFeverMetrics(feverM);
+      setFeverSync(feverS);
+    } else {
+      console.error('Fever sync failed:', result.error);
+    }
+    setSyncing(false);
   };
 
   const formatCurrency = (amount: number) =>
@@ -610,9 +624,9 @@ export default function ProductsPage() {
             {feverSync && (
               <div className="mb-6 flex items-center gap-3 text-sm text-zinc-500">
                 <span>Last synced: {formatTimeAgo(feverSync.lastSyncAt)}</span>
-                <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
-                  <RefreshCw className={cn('h-4 w-4 mr-1', refreshing && 'animate-spin')} />
-                  Refresh
+                <Button variant="ghost" size="sm" onClick={handleFeverSync} disabled={syncing}>
+                  <RefreshCw className={cn('h-4 w-4 mr-1', syncing && 'animate-spin')} />
+                  {syncing ? 'Syncing...' : 'Sync Now'}
                 </Button>
               </div>
             )}

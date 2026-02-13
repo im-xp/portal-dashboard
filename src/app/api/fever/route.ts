@@ -4,6 +4,24 @@ import type { FeverMetrics, FeverSyncState } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
+export async function POST() {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard.icelandeclipse.com';
+    const res = await fetch(`${baseUrl}/api/cron/fever-sync?manual=true`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.CRON_SECRET}` },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      return NextResponse.json({ error: text }, { status: res.status });
+    }
+    return NextResponse.json(await res.json());
+  } catch (error) {
+    console.error('[API] Fever sync trigger error:', error);
+    return NextResponse.json({ error: String(error) }, { status: 500 });
+  }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type') || 'metrics';

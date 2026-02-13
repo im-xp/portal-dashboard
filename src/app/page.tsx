@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Users, UserCheck, CreditCard, DollarSign, CalendarClock, Percent, AlertCircle, RefreshCw, Ticket, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getFeverMetrics, getFeverSyncState } from '@/lib/fever-client';
+import { getFeverMetrics, getFeverSyncState, triggerFeverSync } from '@/lib/fever-client';
 import type { DashboardData, FeverMetrics, FeverSyncState } from '@/lib/types';
 
 export default function DashboardPage() {
@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [feverExpanded, setFeverExpanded] = useState(false);
 
   useEffect(() => {
@@ -68,6 +69,19 @@ export default function DashboardPage() {
     await edgeosP;
     setRefreshing(false);
     await feverP;
+  };
+
+  const handleFeverSync = async () => {
+    setSyncing(true);
+    const result = await triggerFeverSync();
+    if (result.success) {
+      const [feverM, feverS] = await Promise.all([getFeverMetrics(), getFeverSyncState()]);
+      setFeverMetrics(feverM);
+      setFeverSync(feverS);
+    } else {
+      console.error('Fever sync failed:', result.error);
+    }
+    setSyncing(false);
   };
 
   const formatCurrency = (amount: number) =>
@@ -256,9 +270,9 @@ export default function DashboardPage() {
         {feverSync && (
           <div className="mt-4 flex items-center gap-3 text-sm text-zinc-500">
             <span>Fever last synced: {formatTimeAgo(feverSync.lastSyncAt)}</span>
-            <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
-              <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
+            <Button variant="ghost" size="sm" onClick={handleFeverSync} disabled={syncing}>
+              <RefreshCw className={cn('h-4 w-4 mr-1', syncing && 'animate-spin')} />
+              {syncing ? 'Syncing...' : 'Sync Now'}
             </Button>
           </div>
         )}

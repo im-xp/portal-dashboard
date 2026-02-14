@@ -178,11 +178,7 @@ You don't need to hit the Fever API yourself. The cron keeps Supabase up to date
 
 ### Connection
 
-Use the Supabase connection string (session pooler format):
-
-```
-postgresql://postgres.[project-ref]:[password]@aws-1-us-east-2.pooler.supabase.com:5432/postgres
-```
+Ask a project admin to create you a Supabase account with read-only access. Go to the Supabase dashboard > Project Settings > Database > Roles to set this up. This keeps access scoped and auditable rather than sharing a single service role credential.
 
 ### Useful queries
 

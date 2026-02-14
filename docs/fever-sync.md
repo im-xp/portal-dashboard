@@ -186,10 +186,10 @@ GRANT USAGE ON SCHEMA public TO fever_readonly;
 GRANT SELECT ON fever_orders, fever_order_items, fever_sync_state TO fever_readonly;
 ```
 
-Then connect using the session pooler:
+Then connect using the session pooler (note: the project ref is required in the username):
 
 ```
-postgresql://fever_readonly:<password>@aws-1-us-east-2.pooler.supabase.com:5432/postgres
+postgresql://fever_readonly.qnozzvniuptjzefkttgj:<password>@aws-1-us-east-2.pooler.supabase.com:5432/postgres
 ```
 
 This scopes access to only the fever tables with read-only permissions.

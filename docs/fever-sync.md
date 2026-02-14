@@ -178,7 +178,21 @@ You don't need to hit the Fever API yourself. The cron keeps Supabase up to date
 
 ### Connection
 
-Ask a project admin to create you a Supabase account with read-only access. Go to the Supabase dashboard > Project Settings > Database > Roles to set this up. This keeps access scoped and auditable rather than sharing a single service role credential.
+Ask a project admin to create a read-only Postgres role for your service:
+
+```sql
+CREATE ROLE fever_readonly WITH LOGIN PASSWORD '<secure-password>';
+GRANT USAGE ON SCHEMA public TO fever_readonly;
+GRANT SELECT ON fever_orders, fever_order_items, fever_sync_state TO fever_readonly;
+```
+
+Then connect using the session pooler:
+
+```
+postgresql://fever_readonly:<password>@aws-1-us-east-2.pooler.supabase.com:5432/postgres
+```
+
+This scopes access to only the fever tables with read-only permissions.
 
 ### Useful queries
 

@@ -172,6 +172,67 @@ Revenue is also broken down by `plan_id` for per-product reporting.
 | `src/lib/supabase.ts` | Supabase client |
 | `vercel.json` | Cron schedule (`*/5 * * * *`) |
 
+## Querying Fever Data Directly
+
+You don't need to hit the Fever API yourself. The cron keeps Supabase up to date every 5 minutes, so just query the tables directly.
+
+### Connection
+
+Use the Supabase connection string (session pooler format):
+
+```
+postgresql://postgres.[project-ref]:[password]@aws-1-us-east-2.pooler.supabase.com:5432/postgres
+```
+
+### Useful queries
+
+All purchased tickets with buyer and session info:
+
+```sql
+SELECT
+  o.buyer_email,
+  o.buyer_first_name,
+  o.buyer_last_name,
+  o.plan_name,
+  i.unitary_price,
+  i.discount,
+  i.surcharge,
+  i.status,
+  i.session_name,
+  i.session_start
+FROM fever_order_items i
+JOIN fever_orders o ON o.fever_order_id = i.fever_order_id
+WHERE i.status = 'purchased';
+```
+
+Revenue by plan:
+
+```sql
+SELECT
+  o.plan_name,
+  COUNT(*) as tickets,
+  SUM(i.unitary_price + COALESCE(i.surcharge, 0) - COALESCE(i.discount, 0)) as revenue
+FROM fever_order_items i
+JOIN fever_orders o ON o.fever_order_id = i.fever_order_id
+WHERE i.status = 'purchased'
+GROUP BY o.plan_name;
+```
+
+Check when data was last synced:
+
+```sql
+SELECT last_sync_at, last_order_created_at FROM fever_sync_state WHERE id = 1;
+```
+
+### Data freshness
+
+Data is at most 5 minutes stale. The `fever_sync_state` table tracks the last successful sync time. If you need to force a refresh, hit the dashboard "Sync Now" button or call the API directly:
+
+```bash
+curl -X POST "https://dashboard.icelandeclipse.com/api/cron/fever-sync" \
+  -H "Authorization: Bearer <CRON_SECRET>"
+```
+
 ## Common Issues
 
 **Auth failures**: Fever tokens expire. Each sync run gets a fresh token, so this shouldn't be persistent. If auth fails, check that `FEVER_USERNAME` and `FEVER_PASSWORD` are still valid.

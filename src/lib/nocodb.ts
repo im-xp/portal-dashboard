@@ -126,9 +126,9 @@ export async function clearCache(): Promise<void> {
   }
 }
 
-const FETCH_TIMEOUT = 5000;
+const FETCH_TIMEOUT = 10000;
 
-async function nocoFetch<T>(endpoint: string, retries = 1): Promise<T> {
+async function nocoFetch<T>(endpoint: string, retries = 2): Promise<T> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
@@ -143,7 +143,9 @@ async function nocoFetch<T>(endpoint: string, retries = 1): Promise<T> {
       });
 
       if (res.status === 429) {
-        throw new Error(`NocoDB rate limited on ${endpoint}`);
+        if (attempt === retries) throw new Error(`NocoDB rate limited on ${endpoint}`);
+        await delay(1000 * (attempt + 1));
+        continue;
       }
 
       if (!res.ok) {
@@ -280,28 +282,39 @@ export async function refreshDashboardCache(): Promise<DashboardData> {
 async function fetchFreshDashboardData(): Promise<DashboardData> {
   console.log('Fetching fresh dashboard data...');
 
-  const results = await Promise.allSettled([
-    getApplications(),
-    getAttendees(),
-    getProducts(),
-    getPayments(),
-    getPaymentProducts(),
-  ]);
+  // Fetch sequentially to avoid NocoDB rate limits (429 on concurrent requests)
+  const fetchers = [
+    getApplications,
+    getAttendees,
+    getProducts,
+    getPayments,
+    getPaymentProducts,
+  ] as const;
 
-  const failures = results.filter(r => r.status === 'rejected');
-  if (failures.length > 0) {
-    console.error(`NocoDB: ${failures.length}/5 tables failed:`,
-      failures.map(f => (f as PromiseRejectedResult).reason?.message));
+  const results: [Application[], Attendee[], Product[], Payment[], PaymentProduct[]] = [[], [], [], [], []];
+  const errors: string[] = [];
+
+  const tableNames = ['applications', 'attendees', 'products', 'payments', 'paymentProducts'];
+  for (let i = 0; i < fetchers.length; i++) {
+    if (i > 0) await delay(500);
+    try {
+      results[i] = await fetchers[i]() as (typeof results)[number];
+      console.log(`  ${tableNames[i]}: ${results[i].length} records`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`  ${tableNames[i]}: FAILED - ${msg}`);
+      errors.push(msg);
+    }
   }
-  if (failures.length === results.length) {
+
+  if (errors.length > 0) {
+    console.error(`NocoDB: ${errors.length}/5 tables failed:`, errors);
+  }
+  if (errors.length === fetchers.length) {
     throw new Error('All NocoDB tables failed to fetch');
   }
 
-  const applications = results[0].status === 'fulfilled' ? results[0].value : [];
-  const attendees = results[1].status === 'fulfilled' ? results[1].value : [];
-  const products = results[2].status === 'fulfilled' ? results[2].value : [];
-  const payments = results[3].status === 'fulfilled' ? results[3].value : [];
-  const paymentProducts = results[4].status === 'fulfilled' ? results[4].value : [];
+  const [applications, attendees, products, payments, paymentProducts] = results;
 
   const productsMap = new Map<number, LinkedProduct[]>();
   

@@ -13,28 +13,42 @@ import {
   Mail,
   RefreshCw,
   Menu,
-  X
+  X,
+  HandHeart,
+  type LucideIcon,
 } from 'lucide-react';
 import { UserMenu } from './UserMenu';
+import type { UserRole } from '@/lib/auth';
 
-const navigation = [
-  { name: 'Overview', href: '/', icon: LayoutDashboard },
-  { name: 'People', href: '/people', icon: Users },
-  { name: 'Products', href: '/products', icon: Package },
-  { name: 'Applications', href: '/applications', icon: FileText },
-  { name: 'Email', href: '/email-queue', icon: Mail },
+interface NavItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+  roles?: UserRole[];
+}
+
+const navigation: NavItem[] = [
+  { name: 'Overview', href: '/', icon: LayoutDashboard, roles: ['admin'] },
+  { name: 'People', href: '/people', icon: Users, roles: ['admin'] },
+  { name: 'Products', href: '/products', icon: Package, roles: ['admin'] },
+  { name: 'Applications', href: '/applications', icon: FileText, roles: ['admin'] },
+  { name: 'Volunteers', href: '/volunteers', icon: HandHeart },
+  { name: 'Email', href: '/email-queue', icon: Mail, roles: ['admin'] },
 ];
 
 export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   if (status !== 'authenticated' || pathname?.startsWith('/auth')) {
     return null;
   }
+
+  const role = session?.user?.role || 'admin';
+  const visibleNav = navigation.filter(item => !item.roles || item.roles.includes(role));
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -76,7 +90,7 @@ export function MobileNav() {
       {/* Slide-down menu */}
       {menuOpen && (
         <div className="md:hidden fixed top-14 left-0 right-0 z-40 bg-zinc-950 border-b border-zinc-800 py-2">
-          {navigation.map((item) => {
+          {visibleNav.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
@@ -103,7 +117,7 @@ export function MobileNav() {
 
       {/* Bottom navigation bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around bg-zinc-950 border-t border-zinc-800 px-2 pb-safe">
-        {navigation.map((item) => {
+        {visibleNav.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
@@ -125,7 +139,7 @@ export function MobileNav() {
 
       {/* Overlay when menu is open */}
       {menuOpen && (
-        <div 
+        <div
           className="md:hidden fixed inset-0 z-30 bg-black/50"
           onClick={() => setMenuOpen(false)}
         />
@@ -133,6 +147,3 @@ export function MobileNav() {
     </>
   );
 }
-
-
-

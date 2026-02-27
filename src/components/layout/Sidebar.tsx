@@ -5,34 +5,48 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Package, 
+import {
+  LayoutDashboard,
+  Users,
+  Package,
   FileText,
   RefreshCw,
-  Mail 
+  Mail,
+  HandHeart,
+  type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserMenu } from './UserMenu';
+import type { UserRole } from '@/lib/auth';
 
-const navigation = [
-  { name: 'Overview', href: '/', icon: LayoutDashboard },
-  { name: 'People', href: '/people', icon: Users },
-  { name: 'Products', href: '/products', icon: Package },
-  { name: 'Applications', href: '/applications', icon: FileText },
-  { name: 'Email Queue', href: '/email-queue', icon: Mail },
+interface NavItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+  roles?: UserRole[];
+}
+
+const navigation: NavItem[] = [
+  { name: 'Overview', href: '/', icon: LayoutDashboard, roles: ['admin'] },
+  { name: 'People', href: '/people', icon: Users, roles: ['admin'] },
+  { name: 'Products', href: '/products', icon: Package, roles: ['admin'] },
+  { name: 'Applications', href: '/applications', icon: FileText, roles: ['admin'] },
+  { name: 'Volunteers', href: '/volunteers', icon: HandHeart },
+  { name: 'Email Queue', href: '/email-queue', icon: Mail, roles: ['admin'] },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   if (status !== 'authenticated' || pathname?.startsWith('/auth')) {
     return null;
   }
+
+  const role = session?.user?.role || 'admin';
+  const visibleNav = navigation.filter(item => !item.roles || item.roles.includes(role));
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -56,7 +70,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {navigation.map((item) => {
+        {visibleNav.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
@@ -98,4 +112,3 @@ export function Sidebar() {
     </div>
   );
 }
-

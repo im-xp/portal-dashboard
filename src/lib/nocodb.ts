@@ -17,6 +17,9 @@ import type {
   JourneyStage,
   DashboardData,
   PopupCity,
+  VolunteerApplication,
+  VolunteerCustomData,
+  VolunteerDashboardData,
 } from './types';
 
 // Helper to clean env vars (strip whitespace/newlines that can corrupt values)
@@ -120,6 +123,7 @@ export async function clearCache(): Promise<void> {
     await redis.del([
       'dashboard-data', 'dashboard-data:stale',
       'popup-cities', 'popup-cities:stale',
+      'volunteer-data', 'volunteer-data:stale',
     ]);
   } catch (e) {
     console.error('Cache clear failed:', e);
@@ -198,8 +202,13 @@ async function nocoFetchAll<T>(tableId: string, params = ''): Promise<T[]> {
 
 // Base fetchers
 
+const VOLUNTEER_POPUP_CITY_ID = 3;
+
 export async function getApplications(): Promise<Application[]> {
-  return nocoFetchAll<Application>(TABLES.applications);
+  return nocoFetchAll<Application>(
+    TABLES.applications,
+    `where=(popup_city_id,neq,${VOLUNTEER_POPUP_CITY_ID})`
+  );
 }
 
 export async function getAttendees(): Promise<Attendee[]> {
@@ -550,4 +559,75 @@ async function fetchFreshDashboardData(): Promise<DashboardData> {
     products,
     payments: paymentsWithProducts,
   };
+}
+
+// Volunteer data fetcher
+
+interface RawVolunteerApp {
+  id: number;
+  email: string;
+  status: string;
+  residence: string | null;
+  custom_data: string | VolunteerCustomData | null;
+  created_at: string;
+  updated_at: string;
+  submitted_at: string | null;
+}
+
+function parseCustomData(raw: string | VolunteerCustomData | null): VolunteerCustomData {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+export async function getVolunteerData(): Promise<VolunteerDashboardData> {
+  const cacheKey = 'volunteer-data';
+
+  const cached = await getCached<VolunteerDashboardData>(cacheKey);
+  if (cached) return cached;
+
+  const stale = await getStaleCached<VolunteerDashboardData>(cacheKey);
+  if (stale) {
+    refreshVolunteerCache().catch(err =>
+      console.error('Background volunteer refresh failed:', err)
+    );
+    return stale;
+  }
+
+  return refreshVolunteerCache();
+}
+
+async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
+  const cacheKey = 'volunteer-data';
+  const rawApps = await nocoFetchAll<RawVolunteerApp>(
+    TABLES.applications,
+    `where=(popup_city_id,eq,${VOLUNTEER_POPUP_CITY_ID})`
+  );
+
+  const applications: VolunteerApplication[] = rawApps.map(app => ({
+    id: app.id,
+    email: app.email,
+    status: app.status,
+    residence: app.residence,
+    custom_data: parseCustomData(app.custom_data),
+    created_at: app.created_at,
+    updated_at: app.updated_at,
+    submitted_at: app.submitted_at,
+  }));
+
+  const metrics = {
+    total: applications.length,
+    drafts: applications.filter(a => a.status === 'draft').length,
+    inReview: applications.filter(a => a.status === 'in review').length,
+    approved: applications.filter(a => a.status === 'accepted').length,
+    rejected: applications.filter(a => a.status === 'rejected').length,
+  };
+
+  const data: VolunteerDashboardData = { metrics, applications };
+  await setCache(cacheKey, data);
+  return data;
 }

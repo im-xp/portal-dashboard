@@ -227,6 +227,62 @@ export interface PopupCity {
   location?: string;
 }
 
+// Volunteer Types
+
+export interface VolunteerCustomData {
+  full_name?: string;
+  phone_number?: string;
+  volunteer_type?: string;
+  available_phases?: string[];
+  team_preferences?: string[];
+  talents_skills?: string[];
+  skills_description?: string;
+  festival_experience?: string;
+  team_contribution?: string;
+  build_experience?: string;
+  eclipse_attendance?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  city_town?: string;
+  state_option?: string;
+  staff_referral?: string;
+  referral_name?: string;
+  medical_conditions?: string;
+  accommodations_needed?: string;
+  ticket_type?: string;
+  newsletter_opt_in?: string;
+  agreement_consent?: boolean;
+  agreement_date?: string;
+  has_chosen_name?: boolean;
+  chosen_name?: string;
+  data_privacy_consent?: boolean;
+  [key: string]: unknown;
+}
+
+export interface VolunteerApplication {
+  id: number;
+  email: string;
+  status: string;
+  residence: string | null;
+  custom_data: VolunteerCustomData;
+  created_at: string;
+  updated_at: string;
+  submitted_at: string | null;
+}
+
+export interface VolunteerMetrics {
+  total: number;
+  drafts: number;
+  inReview: number;
+  approved: number;
+  rejected: number;
+}
+
+export interface VolunteerDashboardData {
+  metrics: VolunteerMetrics;
+  applications: VolunteerApplication[];
+}
+
 // Fever Data Types (from Supabase cache)
 export interface FeverOrder {
   fever_order_id: string;

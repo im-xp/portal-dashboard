@@ -4,6 +4,16 @@ import { supabase } from './supabase';
 
 const ALLOWED_DOMAINS = ['im-xp.com', 'icelandeclipse.com'];
 
+const VOLUNTEER_VIEWER_EMAILS = ['volunteers@icelandeclipse.com'];
+
+export type UserRole = 'admin' | 'volunteer_viewer';
+
+function resolveRole(email: string): UserRole {
+  return VOLUNTEER_VIEWER_EMAILS.includes(email.toLowerCase())
+    ? 'volunteer_viewer'
+    : 'admin';
+}
+
 export function isAllowedDomain(email: string): boolean {
   const domain = email.split('@')[1]?.toLowerCase();
   return ALLOWED_DOMAINS.includes(domain);
@@ -78,6 +88,7 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email;
         token.name = user.name;
         token.picture = user.image;
+        token.role = resolveRole(user.email || '');
       }
       return token;
     },
@@ -86,6 +97,7 @@ export const authOptions: NextAuthOptions = {
         session.user.email = token.email as string;
         session.user.name = token.name as string;
         session.user.image = token.picture as string;
+        session.user.role = token.role || 'admin';
       }
       return session;
     },

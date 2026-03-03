@@ -323,7 +323,11 @@ async function fetchFreshDashboardData(): Promise<DashboardData> {
     throw new Error('All NocoDB tables failed to fetch');
   }
 
-  const [applications, attendees, products, payments, paymentProducts] = results;
+  const [applications, allAttendees, products, payments, paymentProducts] = results;
+
+  // Filter out attendees linked to volunteer applications (attendees table has no popup_city_id)
+  const validAppIds = new Set(applications.map(a => a.id));
+  const attendees = allAttendees.filter(a => validAppIds.has(a.application_id));
 
   const productsMap = new Map<number, LinkedProduct[]>();
   

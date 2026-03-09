@@ -4,7 +4,11 @@ import { supabase } from './supabase';
 
 const ALLOWED_DOMAINS = ['im-xp.com', 'icelandeclipse.com'];
 
-const VOLUNTEER_VIEWER_EMAILS = ['volunteers@icelandeclipse.com'];
+const VOLUNTEER_VIEWER_EMAILS = [
+  'volunteers@icelandeclipse.com',
+  'tule@simplefi.tech',
+  'francisco@muvinai.com',
+];
 
 export type UserRole = 'admin' | 'volunteer_viewer';
 
@@ -14,8 +18,10 @@ function resolveRole(email: string): UserRole {
     : 'admin';
 }
 
-export function isAllowedDomain(email: string): boolean {
-  const domain = email.split('@')[1]?.toLowerCase();
+export function isAllowedEmail(email: string): boolean {
+  const lower = email.toLowerCase();
+  if (VOLUNTEER_VIEWER_EMAILS.includes(lower)) return true;
+  const domain = lower.split('@')[1];
   return ALLOWED_DOMAINS.includes(domain);
 }
 
@@ -35,7 +41,7 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }) {
-      if (!user.email || !isAllowedDomain(user.email)) {
+      if (!user.email || !isAllowedEmail(user.email)) {
         console.log('[Auth] Rejected sign-in for:', user.email);
         return false;
       }

@@ -8,6 +8,7 @@ const VOLUNTEER_VIEWER_EMAILS = [
   'volunteers@icelandeclipse.com',
   'tule@simplefi.tech',
   'francisco@muvinai.com',
+  'shapiro.jon@gmail.com',
 ];
 
 export type UserRole = 'admin' | 'volunteer_viewer';

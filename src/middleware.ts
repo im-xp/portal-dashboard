@@ -10,6 +10,8 @@ const VOLUNTEER_VIEWER_ALLOWED_PREFIXES = [
   '/auth',
   '/api/auth',
   '/api/volunteers',
+  '/api/segments',
+  '/api/applications',
 ];
 
 export default withAuth(

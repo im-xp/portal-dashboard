@@ -48,6 +48,7 @@ const TABLES = {
   products: cleanEnv(process.env.NOCODB_TABLE_PRODUCTS) || 'mjt8xx9ltkhfcbu',
   payments: cleanEnv(process.env.NOCODB_TABLE_PAYMENTS) || 'mgxw2e15fw64o1f',
   paymentProducts: cleanEnv(process.env.NOCODB_TABLE_PAYMENT_PRODUCTS) || 'm9y11y6lwwxuq6k',
+  popups: cleanEnv(process.env.NOCODB_TABLE_POPUPS) || 'm90ygqlx157su03',
 } as const;
 
 // Simple delay helper
@@ -227,26 +228,30 @@ export async function getPaymentProducts(): Promise<PaymentProduct[]> {
   return nocoFetchAll<PaymentProduct>(TABLES.paymentProducts);
 }
 
+interface RawPopupCity {
+  id: number;
+  name: string;
+  slug: string;
+  location?: string;
+}
+
 export async function getPopupCities(): Promise<PopupCity[]> {
   const cacheKey = 'popup-cities';
   const cached = await getCached<PopupCity[]>(cacheKey);
   if (cached) return cached;
 
-  // Derive popup cities from applications data (they have linked popups)
-  const applications = await getApplications();
-  const citiesMap = new Map<number, PopupCity>();
+  const raw = await nocoFetchAll<RawPopupCity>(
+    TABLES.popups,
+    `where=(id,neq,${VOLUNTEER_POPUP_CITY_ID})`
+  );
 
-  for (const app of applications) {
-    if (app.popups && app.popup_city_id && !citiesMap.has(app.popup_city_id)) {
-      citiesMap.set(app.popup_city_id, {
-        id: app.popups.id,
-        name: app.popups.name,
-        slug: app.popups.name.toLowerCase().replace(/\s+/g, '-'),
-      });
-    }
-  }
+  const cities: PopupCity[] = raw.map(p => ({
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    location: p.location,
+  }));
 
-  const cities = Array.from(citiesMap.values());
   await setCache(cacheKey, cities);
   return cities;
 }

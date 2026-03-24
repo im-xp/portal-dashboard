@@ -227,6 +227,32 @@ export interface PopupCity {
   location?: string;
 }
 
+// Product Segments (EdgeOS API)
+
+export interface SegmentProduct {
+  id: number;
+  name: string;
+  slug: string;
+  price: number;
+}
+
+export interface ProductSegment {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  popup_city_id: number;
+  products: SegmentProduct[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewApplicationBody {
+  status: 'accepted' | 'rejected';
+  discount_assigned?: number;
+  segment_slugs?: string[];
+}
+
 // Volunteer Types
 
 export interface VolunteerCustomData {

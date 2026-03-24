@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -21,10 +22,10 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
-import { HandHeart, FileText, Clock, CheckCircle, XCircle, Search } from 'lucide-react';
+import { HandHeart, FileText, Clock, CheckCircle, XCircle, Search, Loader2, X } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import type { VolunteerDashboardData, VolunteerApplication } from '@/lib/types';
+import type { VolunteerDashboardData, VolunteerApplication, ProductSegment } from '@/lib/types';
 
 type StatusFilter = 'all' | 'draft' | 'in review' | 'accepted' | 'rejected';
 
@@ -34,6 +35,10 @@ export default function VolunteersPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
   const [selectedApp, setSelectedApp] = useState<VolunteerApplication | null>(null);
+
+  const [segments, setSegments] = useState<ProductSegment[]>([]);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -48,6 +53,62 @@ export default function VolunteersPage() {
       }
     }
     fetchData();
+
+    fetch('/api/segments?popup_city_slug=iceland-eclipse-volunteers')
+      .then(r => r.ok ? r.json() : [])
+      .then(setSegments)
+      .catch(() => setSegments([]));
+  }, []);
+
+  const handleReview = useCallback(async (
+    appId: number,
+    status: 'accepted' | 'rejected',
+    options?: { discount_assigned?: number; segment_slugs?: string[] }
+  ) => {
+    setReviewLoading(true);
+    setReviewError(null);
+
+    const body: Record<string, unknown> = { status };
+    if (status === 'accepted' && options) {
+      if (options.discount_assigned != null) body.discount_assigned = options.discount_assigned;
+      if (options.segment_slugs?.length) body.segment_slugs = options.segment_slugs;
+    }
+
+    try {
+      const res = await fetch(`/api/applications/${appId}/review`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || `Review failed: ${res.status}`);
+      }
+
+      await fetch('/api/refresh', { method: 'POST' });
+
+      setData(prev => {
+        if (!prev) return prev;
+        const updated = prev.applications.map(a =>
+          a.id === appId ? { ...a, status } : a
+        );
+        const metrics = {
+          total: updated.length,
+          drafts: updated.filter(a => a.status === 'draft').length,
+          inReview: updated.filter(a => a.status === 'in review').length,
+          approved: updated.filter(a => a.status === 'accepted').length,
+          rejected: updated.filter(a => a.status === 'rejected').length,
+        };
+        return { metrics, applications: updated };
+      });
+
+      setSelectedApp(null);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : 'Review failed');
+    } finally {
+      setReviewLoading(false);
+    }
   }, []);
 
   const filteredApplications = useMemo(() => {
@@ -243,17 +304,50 @@ export default function VolunteersPage() {
       </div>
 
       {/* Detail Sheet */}
-      <Sheet open={!!selectedApp} onOpenChange={open => !open && setSelectedApp(null)}>
+      <Sheet open={!!selectedApp} onOpenChange={open => { if (!open) { setSelectedApp(null); setReviewError(null); } }}>
         <SheetContent className="overflow-y-auto">
-          {selectedApp && <VolunteerDetail app={selectedApp} />}
+          {selectedApp && (
+            <VolunteerDetail
+              app={selectedApp}
+              segments={segments}
+              reviewLoading={reviewLoading}
+              reviewError={reviewError}
+              onReview={handleReview}
+            />
+          )}
         </SheetContent>
       </Sheet>
     </div>
   );
 }
 
-function VolunteerDetail({ app }: { app: VolunteerApplication }) {
+interface VolunteerDetailProps {
+  app: VolunteerApplication;
+  segments: ProductSegment[];
+  reviewLoading: boolean;
+  reviewError: string | null;
+  onReview: (appId: number, status: 'accepted' | 'rejected', options?: { discount_assigned?: number; segment_slugs?: string[] }) => void;
+}
+
+function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }: VolunteerDetailProps) {
   const cd = app.custom_data;
+  const [selectedSegmentSlugs, setSelectedSegmentSlugs] = useState<string[]>([]);
+  const [discount, setDiscount] = useState('');
+
+  const canReview = app.status === 'in review' || app.status === 'accepted' || app.status === 'rejected';
+
+  const handleAccept = () => {
+    if (segments.length > 0 && selectedSegmentSlugs.length === 0) return;
+    const discountNum = parseInt(discount, 10);
+    onReview(app.id, 'accepted', {
+      discount_assigned: !isNaN(discountNum) ? Math.min(100, Math.max(0, discountNum)) : undefined,
+      segment_slugs: segments.length > 0 ? selectedSegmentSlugs : undefined,
+    });
+  };
+
+  const handleReject = () => {
+    onReview(app.id, 'rejected');
+  };
 
   return (
     <>
@@ -271,6 +365,93 @@ function VolunteerDetail({ app }: { app: VolunteerApplication }) {
             </span>
           )}
         </div>
+
+        {/* Review Actions */}
+        {canReview && (
+          <>
+            <div className="space-y-4 p-4 rounded-lg bg-zinc-50 border border-zinc-200">
+              <h3 className="text-sm font-semibold text-zinc-900">Review</h3>
+
+              <div>
+                <label className="text-sm text-zinc-600 block mb-1">Discount (%)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="0"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                  className="w-32"
+                />
+              </div>
+
+              {segments.length > 0 && (
+                <div>
+                  <label className="text-sm text-zinc-600 block mb-2">
+                    Product Segments <span className="text-red-500">*</span>
+                  </label>
+                  <div className="space-y-2">
+                    {segments.map(seg => (
+                      <label
+                        key={seg.slug}
+                        className={cn(
+                          'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                          selectedSegmentSlugs.includes(seg.slug)
+                            ? 'border-zinc-900 bg-white'
+                            : 'border-zinc-200 hover:border-zinc-300 bg-white'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSegmentSlugs.includes(seg.slug)}
+                          onChange={() => setSelectedSegmentSlugs(prev =>
+                            prev.includes(seg.slug) ? prev.filter(s => s !== seg.slug) : [...prev, seg.slug]
+                          )}
+                          className="mt-0.5 rounded"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{seg.name}</p>
+                          {seg.description && (
+                            <p className="text-xs text-zinc-500 mt-0.5">{seg.description}</p>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {reviewError && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+                  <X className="h-4 w-4 mt-0.5 shrink-0" />
+                  {reviewError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleAccept}
+                  disabled={reviewLoading || (segments.length > 0 && selectedSegmentSlugs.length === 0)}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {reviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                  Accept
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleReject}
+                  disabled={reviewLoading}
+                  className="flex-1"
+                >
+                  {reviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                  Reject
+                </Button>
+              </div>
+            </div>
+
+            <Separator />
+          </>
+        )}
 
         {/* About */}
         <Section title="About">

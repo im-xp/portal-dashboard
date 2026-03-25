@@ -578,6 +578,7 @@ interface RawVolunteerApp {
   status: string;
   residence: string | null;
   custom_data: string | VolunteerCustomData | null;
+  coordinator_notes: string | null;
   created_at: string;
   updated_at: string;
   submitted_at: string | null;
@@ -623,6 +624,7 @@ async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
     status: app.status,
     residence: app.residence,
     custom_data: parseCustomData(app.custom_data),
+    coordinator_notes: app.coordinator_notes ?? null,
     created_at: app.created_at,
     updated_at: app.updated_at,
     submitted_at: app.submitted_at,

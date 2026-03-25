@@ -63,7 +63,7 @@ export default function VolunteersPage() {
   const handleReview = useCallback(async (
     appId: number,
     status: 'accepted' | 'rejected',
-    options?: { discount_assigned?: number; segment_slugs?: string[] }
+    options?: { discount_assigned?: number; segment_slugs?: string[]; coordinator_notes?: string }
   ) => {
     setReviewLoading(true);
     setReviewError(null);
@@ -72,6 +72,9 @@ export default function VolunteersPage() {
     if (status === 'accepted' && options) {
       if (options.discount_assigned != null) body.discount_assigned = options.discount_assigned;
       if (options.segment_slugs?.length) body.segment_slugs = options.segment_slugs;
+    }
+    if (options?.coordinator_notes !== undefined) {
+      body.coordinator_notes = options.coordinator_notes || null;
     }
 
     try {
@@ -88,10 +91,11 @@ export default function VolunteersPage() {
 
       await fetch('/api/refresh', { method: 'POST' });
 
+      const savedNotes = options?.coordinator_notes ?? null;
       setData(prev => {
         if (!prev) return prev;
         const updated = prev.applications.map(a =>
-          a.id === appId ? { ...a, status } : a
+          a.id === appId ? { ...a, status, coordinator_notes: savedNotes !== undefined ? savedNotes : a.coordinator_notes } : a
         );
         const metrics = {
           total: updated.length,
@@ -326,13 +330,14 @@ interface VolunteerDetailProps {
   segments: ProductSegment[];
   reviewLoading: boolean;
   reviewError: string | null;
-  onReview: (appId: number, status: 'accepted' | 'rejected', options?: { discount_assigned?: number; segment_slugs?: string[] }) => void;
+  onReview: (appId: number, status: 'accepted' | 'rejected', options?: { discount_assigned?: number; segment_slugs?: string[]; coordinator_notes?: string }) => void;
 }
 
 function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }: VolunteerDetailProps) {
   const cd = app.custom_data;
   const [selectedSegmentSlugs, setSelectedSegmentSlugs] = useState<string[]>([]);
   const [discount, setDiscount] = useState('');
+  const [notes, setNotes] = useState(app.coordinator_notes || '');
 
   const canReview = app.status === 'in review' || app.status === 'accepted' || app.status === 'rejected';
 
@@ -342,11 +347,14 @@ function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }
     onReview(app.id, 'accepted', {
       discount_assigned: !isNaN(discountNum) ? Math.min(100, Math.max(0, discountNum)) : undefined,
       segment_slugs: segments.length > 0 ? selectedSegmentSlugs : undefined,
+      coordinator_notes: notes.trim() || undefined,
     });
   };
 
   const handleReject = () => {
-    onReview(app.id, 'rejected');
+    onReview(app.id, 'rejected', {
+      coordinator_notes: notes.trim() || undefined,
+    });
   };
 
   return (
@@ -371,6 +379,17 @@ function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }
           <>
             <div className="space-y-4 p-4 rounded-lg bg-zinc-50 border border-zinc-200">
               <h3 className="text-sm font-semibold text-zinc-900">Review</h3>
+
+              <div>
+                <label className="text-sm text-zinc-600 block mb-1">Coordinator Notes</label>
+                <textarea
+                  placeholder="Internal notes about this application..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                  className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+                />
+              </div>
 
               <div>
                 <label className="text-sm text-zinc-600 block mb-1">Discount (%)</label>

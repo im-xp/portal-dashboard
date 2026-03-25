@@ -51,7 +51,8 @@ Request body:
 {
   "status": "accepted",           // "accepted" | "rejected"
   "discount_assigned": 70,        // 0-100, optional (defaults to 0 on accept)
-  "segment_slugs": ["long-build"] // string[], required when popup has segments
+  "segment_slugs": ["long-build"], // string[], required when popup has segments
+  "coordinator_notes": "Approved after internal housing review" // string | null, optional
 }
 ```
 
@@ -61,6 +62,7 @@ Rules:
 - If popup city has no segments, omit `segment_slugs` or set to `null`.
 - Invalid slug returns 400.
 - Rejection clears `discount_assigned`, `accepted_at`, and `product_segments`.
+- `coordinator_notes` is optional, persists on the application record, and stays internal-only (not returned in API responses). Patch semantics: omitting preserves existing value, sending `null` clears it.
 
 Response: full Application object with `product_segment_ids: number[]`.
 
@@ -120,6 +122,7 @@ interface ReviewApplicationBody {
   status: 'accepted' | 'rejected';
   discount_assigned?: number;
   segment_slugs?: string[];
+  coordinator_notes?: string | null;
 }
 ```
 
@@ -207,6 +210,28 @@ After a successful review, call `POST /api/refresh` (existing endpoint that call
 - **Safe to develop on prod** since changes are dashboard-only (confirmed by Jesse, msg 897).
 - **Future work:** Jesse wants a pipeline to send confirmed volunteer data to Shift Happens' Airtable for scheduling (msg 901). Out of scope for this plan.
 - **New application question requested:** Bjarni from Iceland Team wants to add English fluency question (msg 908). Out of scope for this plan.
+
+## Coordinator Notes (added 2026-03-25)
+
+Francisco added `coordinator_notes` to the review endpoint (commit `9965fdc`). Internal-only string field stored on the Application model. Not returned in API responses.
+
+### Backend
+- `coordinator_notes: Optional[str] = None` on `ApplicationReviewUpdate` schema
+- Patch semantics via `model_fields_set`: omitting preserves existing value, explicit `null` clears it
+- Stored as `Column(String)` on Application model
+- 3 tests: internal storage, patch semantics, segment integration
+
+### Frontend
+- Textarea in `VolunteerDetail` review panel (volunteers/page.tsx), above discount input
+- Pre-populated from `app.coordinator_notes` (read via NocoDB -> `RawVolunteerApp.coordinator_notes`)
+- Sent on both accept and reject actions
+- Optimistic local state update after successful save
+
+### Data Flow
+```
+NocoDB (reads Postgres) -> dashboard API -> VolunteerApplication.coordinator_notes -> textarea
+textarea -> PATCH /api/applications/{id}/review -> EdgeOS API -> Postgres
+```
 
 ## Notes
 

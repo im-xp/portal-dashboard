@@ -251,6 +251,7 @@ export interface ReviewApplicationBody {
   status: 'accepted' | 'rejected';
   discount_assigned?: number;
   segment_slugs?: string[];
+  coordinator_notes?: string | null;
 }
 
 // Volunteer Types
@@ -291,6 +292,7 @@ export interface VolunteerApplication {
   status: string;
   residence: string | null;
   custom_data: VolunteerCustomData;
+  coordinator_notes: string | null;
   created_at: string;
   updated_at: string;
   submitted_at: string | null;

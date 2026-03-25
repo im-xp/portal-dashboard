@@ -6,6 +6,7 @@ const ALLOWED_DOMAINS = ['im-xp.com', 'icelandeclipse.com'];
 
 const VOLUNTEER_VIEWER_EMAILS = [
   'volunteers@icelandeclipse.com',
+  'zilla@shifthappensvolunteers.com',
   'tule@simplefi.tech',
   'francisco@muvinai.com',
   'shapiro.jon@gmail.com',

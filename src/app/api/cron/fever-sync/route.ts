@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { fetchFeverOrders, orderToDbRow, itemToDbRow, FeverOrder } from '@/lib/fever';
 import { sendSlackMessage, formatFeverOrderNotification } from '@/lib/slack';
+import { identifyBuyer, trackOrderCompleted, trackOrderCancelled, flushSegment } from '@/lib/segment';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -140,6 +141,32 @@ async function runSync(isManual = false): Promise<NextResponse> {
           process.env.FEVER_SLACK_WEBHOOK_URL
         );
       }
+    }
+
+    if (process.env.SEGMENT_WRITE_KEY) {
+      for (const order of newOrders) {
+        const orderItems = items.filter((i) => i.feverOrderId === order.feverOrderId);
+        try {
+          identifyBuyer(order, orderItems);
+          trackOrderCompleted(order, orderItems);
+        } catch (err) {
+          console.error(`[Segment] Failed for order ${order.feverOrderId}:`, err);
+        }
+      }
+
+      for (const order of orders.filter((o) => existingOrderIds.has(o.feverOrderId))) {
+        const orderItems = items.filter((i) => i.feverOrderId === order.feverOrderId);
+        const hasCancellations = orderItems.some((i) => i.status === 'CANCELLED');
+        if (hasCancellations) {
+          try {
+            trackOrderCancelled(order, orderItems);
+          } catch (err) {
+            console.error(`[Segment] Cancel tracking failed for order ${order.feverOrderId}:`, err);
+          }
+        }
+      }
+
+      await flushSegment();
     }
 
     let latestOrderCreated = syncState?.last_order_created_at;

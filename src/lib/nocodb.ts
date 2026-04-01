@@ -618,17 +618,65 @@ async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
     `where=(popup_city_id,eq,${VOLUNTEER_POPUP_CITY_ID})`
   );
 
-  const applications: VolunteerApplication[] = rawApps.map(app => ({
-    id: app.id,
-    email: app.email,
-    status: app.status,
-    residence: app.residence,
-    custom_data: parseCustomData(app.custom_data),
-    coordinator_notes: app.coordinator_notes ?? null,
-    created_at: app.created_at,
-    updated_at: app.updated_at,
-    submitted_at: app.submitted_at,
-  }));
+  // Fetch payments and payment products (with delays to avoid NocoDB 429s)
+  await delay(500);
+  const allPayments = await getPayments();
+  await delay(500);
+  const allPaymentProducts = await getPaymentProducts();
+
+  // Build lookup: application_id -> approved payment + its products
+  const volunteerAppIds = new Set(rawApps.map(a => a.id));
+  const paymentsByApp = new Map<number, Payment[]>();
+  for (const p of allPayments) {
+    if (!volunteerAppIds.has(p.application_id)) continue;
+    const existing = paymentsByApp.get(p.application_id) || [];
+    existing.push(p);
+    paymentsByApp.set(p.application_id, existing);
+  }
+
+  const productsByPayment = new Map<number, PaymentProduct[]>();
+  for (const pp of allPaymentProducts) {
+    const existing = productsByPayment.get(pp.payment_id) || [];
+    existing.push(pp);
+    productsByPayment.set(pp.payment_id, existing);
+  }
+
+  const applications: VolunteerApplication[] = rawApps.map(app => {
+    const payments = paymentsByApp.get(app.id) || [];
+    const approvedPayment = payments.find(p => p.status === 'approved');
+    const pendingPayment = payments.find(p => p.status === 'pending');
+
+    let paymentStatus: 'none' | 'pending' | 'paid' = 'none';
+    if (approvedPayment) paymentStatus = 'paid';
+    else if (pendingPayment) paymentStatus = 'pending';
+
+    // Derive selected phase from payment products of approved payment
+    let selectedPhase: string | null = null;
+    if (approvedPayment) {
+      const products = productsByPayment.get(approvedPayment.id) || [];
+      const phaseProduct = products.find(pp =>
+        pp.product_category?.toLowerCase() === 'phase' ||
+        pp.product_name?.toLowerCase().includes('phase')
+      );
+      selectedPhase = phaseProduct?.product_name ?? null;
+    }
+
+    return {
+      id: app.id,
+      email: app.email,
+      status: app.status,
+      residence: app.residence,
+      custom_data: parseCustomData(app.custom_data),
+      coordinator_notes: app.coordinator_notes ?? null,
+      created_at: app.created_at,
+      updated_at: app.updated_at,
+      submitted_at: app.submitted_at,
+      payment_status: paymentStatus,
+      selected_phase: selectedPhase,
+      payment_amount: approvedPayment?.amount ?? 0,
+      discount_value: approvedPayment?.discount_value ?? 0,
+    };
+  });
 
   const metrics = {
     total: applications.length,
@@ -636,6 +684,7 @@ async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
     inReview: applications.filter(a => a.status === 'in review').length,
     approved: applications.filter(a => a.status === 'accepted').length,
     rejected: applications.filter(a => a.status === 'rejected').length,
+    confirmed: applications.filter(a => a.payment_status === 'paid').length,
   };
 
   const data: VolunteerDashboardData = { metrics, applications };

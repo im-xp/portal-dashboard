@@ -296,6 +296,10 @@ export interface VolunteerApplication {
   created_at: string;
   updated_at: string;
   submitted_at: string | null;
+  payment_status: 'none' | 'pending' | 'paid';
+  selected_phase: string | null;
+  payment_amount: number;
+  discount_value: number;
 }
 
 export interface VolunteerMetrics {
@@ -304,6 +308,7 @@ export interface VolunteerMetrics {
   inReview: number;
   approved: number;
   rejected: number;
+  confirmed: number;
 }
 
 export interface VolunteerDashboardData {

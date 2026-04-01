@@ -22,12 +22,12 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
-import { HandHeart, FileText, Clock, CheckCircle, XCircle, Search, Loader2, X } from 'lucide-react';
+import { HandHeart, FileText, Clock, CheckCircle, XCircle, Search, Loader2, X, BadgeCheck, DollarSign } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { VolunteerDashboardData, VolunteerApplication, ProductSegment } from '@/lib/types';
 
-type StatusFilter = 'all' | 'draft' | 'in review' | 'accepted' | 'rejected';
+type StatusFilter = 'all' | 'draft' | 'in review' | 'accepted' | 'rejected' | 'confirmed';
 
 export default function VolunteersPage() {
   const [data, setData] = useState<VolunteerDashboardData | null>(null);
@@ -103,6 +103,7 @@ export default function VolunteersPage() {
           inReview: updated.filter(a => a.status === 'in review').length,
           approved: updated.filter(a => a.status === 'accepted').length,
           rejected: updated.filter(a => a.status === 'rejected').length,
+          confirmed: updated.filter(a => a.payment_status === 'paid').length,
         };
         return { metrics, applications: updated };
       });
@@ -119,7 +120,9 @@ export default function VolunteersPage() {
     if (!data) return [];
     let apps = data.applications;
 
-    if (statusFilter !== 'all') {
+    if (statusFilter === 'confirmed') {
+      apps = apps.filter(a => a.payment_status === 'paid');
+    } else if (statusFilter !== 'all') {
       apps = apps.filter(a => a.status === statusFilter);
     }
 
@@ -146,6 +149,7 @@ export default function VolunteersPage() {
     { label: 'Draft', value: 'draft', count: data?.metrics.drafts || 0 },
     { label: 'In Review', value: 'in review', count: data?.metrics.inReview || 0 },
     { label: 'Approved', value: 'accepted', count: data?.metrics.approved || 0 },
+    { label: 'Confirmed', value: 'confirmed', count: data?.metrics.confirmed || 0 },
     { label: 'Rejected', value: 'rejected', count: data?.metrics.rejected || 0 },
   ];
 
@@ -154,8 +158,8 @@ export default function VolunteersPage() {
       <div className="flex flex-col">
         <Header title="Volunteers" description="Track volunteer applications for Iceland Eclipse" />
         <div className="p-4 md:p-8">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-6">
-            {[1, 2, 3, 4].map(i => (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4 mb-6">
+            {[1, 2, 3, 4, 5].map(i => (
               <div key={i} className="h-24 bg-zinc-100 animate-pulse rounded-lg" />
             ))}
           </div>
@@ -171,7 +175,7 @@ export default function VolunteersPage() {
 
       <div className="p-4 md:p-8">
         {/* Metrics */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-6 md:mb-8">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4 mb-6 md:mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
               <CardTitle className="text-xs md:text-sm font-medium text-zinc-500">Total</CardTitle>
@@ -209,6 +213,16 @@ export default function VolunteersPage() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="text-2xl md:text-3xl font-bold text-emerald-600">{data?.metrics.approved || 0}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium text-zinc-500">Confirmed</CardTitle>
+              <BadgeCheck className="h-4 w-4 md:h-5 md:w-5 text-blue-500" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="text-2xl md:text-3xl font-bold text-blue-600">{data?.metrics.confirmed || 0}</div>
             </CardContent>
           </Card>
         </div>
@@ -251,6 +265,7 @@ export default function VolunteersPage() {
                   <TableHead className="w-[180px] lg:w-[200px]">Name</TableHead>
                   <TableHead className="hidden md:table-cell w-[200px]">Email</TableHead>
                   <TableHead className="w-[100px]">Status</TableHead>
+                  <TableHead className="hidden md:table-cell w-[100px]">Payment</TableHead>
                   <TableHead className="hidden md:table-cell w-[120px]">Type</TableHead>
                   <TableHead className="hidden lg:table-cell w-[140px]">Phases</TableHead>
                   <TableHead className="hidden lg:table-cell w-[140px]">Teams</TableHead>
@@ -278,6 +293,9 @@ export default function VolunteersPage() {
                     <TableCell>
                       <StatusBadge status={app.status} />
                     </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <PaymentBadge status={app.payment_status} />
+                    </TableCell>
                     <TableCell className="hidden md:table-cell text-sm text-zinc-600 truncate">
                       {app.custom_data?.volunteer_type || '—'}
                     </TableCell>
@@ -296,7 +314,7 @@ export default function VolunteersPage() {
                 ))}
                 {filteredApplications.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-zinc-400 py-8">
+                    <TableCell colSpan={8} className="text-center text-zinc-400 py-8">
                       No volunteer applications found
                     </TableCell>
                   </TableRow>
@@ -367,12 +385,35 @@ function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }
       <div className="mt-4 space-y-6">
         <div className="flex items-center gap-2">
           <StatusBadge status={app.status} />
+          {app.payment_status !== 'none' && <PaymentBadge status={app.payment_status} />}
           {app.submitted_at && (
             <span className="text-xs text-zinc-500">
               Submitted {format(new Date(app.submitted_at), 'MMM d, yyyy')}
             </span>
           )}
         </div>
+
+        {app.payment_status !== 'none' && (
+          <>
+            <Section title="Payment">
+              <Field
+                label="Status"
+                value={app.payment_status === 'paid' ? 'Paid' : 'Pending'}
+              />
+              <Field
+                label="Amount"
+                value={app.discount_value === 100 ? 'Waived' : `$${app.payment_amount}`}
+              />
+              {app.discount_value > 0 && app.discount_value < 100 && (
+                <Field label="Discount" value={`${app.discount_value}%`} />
+              )}
+              {app.selected_phase && (
+                <Field label="Selected Phase" value={app.selected_phase} />
+              )}
+            </Section>
+            <Separator />
+          </>
+        )}
 
         {/* Review Actions */}
         {canReview && (
@@ -577,6 +618,21 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <Badge variant="outline" className={cn('capitalize text-xs', styles[status] || '')}>
       {status}
+    </Badge>
+  );
+}
+
+function PaymentBadge({ status }: { status: 'none' | 'pending' | 'paid' }) {
+  if (status === 'none') return <span className="text-zinc-400 text-xs">—</span>;
+  const styles = {
+    pending: 'bg-amber-50 text-amber-700 border-amber-200',
+    paid: 'bg-blue-50 text-blue-700 border-blue-200',
+  };
+  const labels = { pending: 'Pending', paid: 'Paid' };
+  return (
+    <Badge variant="outline" className={cn('text-xs', styles[status])}>
+      <DollarSign className="h-3 w-3 mr-0.5" />
+      {labels[status]}
     </Badge>
   );
 }

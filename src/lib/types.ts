@@ -101,6 +101,7 @@ export interface Payment {
   discount_value: number;
   group_id: number | null;
   edit_passes: boolean;
+  is_application_fee: boolean;
   is_installment_plan: boolean;
   installments_total: number | null;
   installments_paid: number;

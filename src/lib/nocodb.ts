@@ -642,7 +642,8 @@ async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
   }
 
   const applications: VolunteerApplication[] = rawApps.map(app => {
-    const payments = paymentsByApp.get(app.id) || [];
+    // Exclude $5 application fee payments - only look at deposit/phase payments
+    const payments = (paymentsByApp.get(app.id) || []).filter(p => !p.is_application_fee);
     const approvedPayment = payments.find(p => p.status === 'approved');
     const pendingPayment = payments.find(p => p.status === 'pending');
 

@@ -353,8 +353,8 @@ interface VolunteerDetailProps {
 
 function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }: VolunteerDetailProps) {
   const cd = app.custom_data;
-  const [selectedSegmentSlugs, setSelectedSegmentSlugs] = useState<string[]>([]);
-  const [discount, setDiscount] = useState('');
+  const [selectedSegmentSlugs, setSelectedSegmentSlugs] = useState<string[]>(app.assigned_segment_slugs || []);
+  const [discount, setDiscount] = useState(app.discount_assigned != null ? String(app.discount_assigned) : '');
   const [notes, setNotes] = useState(app.coordinator_notes || '');
 
   const canReview = app.status === 'in review' || app.status === 'accepted' || app.status === 'rejected';

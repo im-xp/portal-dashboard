@@ -49,6 +49,11 @@ const TABLES = {
   payments: cleanEnv(process.env.NOCODB_TABLE_PAYMENTS) || 'mgxw2e15fw64o1f',
   paymentProducts: cleanEnv(process.env.NOCODB_TABLE_PAYMENT_PRODUCTS) || 'm9y11y6lwwxuq6k',
   popups: cleanEnv(process.env.NOCODB_TABLE_POPUPS) || 'm90ygqlx157su03',
+  productSegments: 'mszogd4rjf7jn4c',
+} as const;
+
+const LINK_FIELDS = {
+  segmentApplications: 'cvutcjyruxx2nlt',
 } as const;
 
 // Simple delay helper
@@ -192,6 +197,23 @@ async function nocoFetchAll<T>(tableId: string, params = ''): Promise<T[]> {
     const sep = params ? '&' : '';
     const response = await nocoFetch<NocoDBResponse<T>>(
       `/tables/${tableId}/records?limit=${PAGE_SIZE}&offset=${offset}${sep}${params}`
+    );
+    all.push(...response.list);
+    if (response.pageInfo.isLastPage || response.list.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return all;
+}
+
+async function nocoFetchLinks<T>(tableId: string, linkFieldId: string, recordId: number): Promise<T[]> {
+  const PAGE_SIZE = 200;
+  const all: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const response = await nocoFetch<NocoDBResponse<T>>(
+      `/tables/${tableId}/links/${linkFieldId}/records/${recordId}?limit=${PAGE_SIZE}&offset=${offset}`
     );
     all.push(...response.list);
     if (response.pageInfo.isLastPage || response.list.length < PAGE_SIZE) break;
@@ -579,6 +601,7 @@ interface RawVolunteerApp {
   residence: string | null;
   custom_data: string | VolunteerCustomData | null;
   coordinator_notes: string | null;
+  discount_assigned: string | number | null;
   created_at: string;
   updated_at: string;
   submitted_at: string | null;
@@ -623,6 +646,23 @@ async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
   const allPayments = await getPayments();
   await delay(500);
   const allPaymentProducts = await getPaymentProducts();
+
+  // Fetch segment assignments: for each segment, get linked app IDs
+  await delay(500);
+  interface RawSegment { id: number; name: string; slug: string }
+  const segments = await nocoFetchAll<RawSegment>(TABLES.productSegments);
+  const segmentsByApp = new Map<number, string[]>();
+  for (const seg of segments) {
+    await delay(300);
+    const linked = await nocoFetchLinks<{ id: number }>(
+      TABLES.productSegments, LINK_FIELDS.segmentApplications, seg.id
+    );
+    for (const app of linked) {
+      const existing = segmentsByApp.get(app.id) || [];
+      existing.push(seg.slug);
+      segmentsByApp.set(app.id, existing);
+    }
+  }
 
   // Build lookup: application_id -> approved payment + its products
   const volunteerAppIds = new Set(rawApps.map(a => a.id));
@@ -676,6 +716,8 @@ async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
       selected_phase: selectedPhase,
       payment_amount: approvedPayment?.amount ?? 0,
       discount_value: approvedPayment?.discount_value ?? 0,
+      discount_assigned: app.discount_assigned != null ? Number(app.discount_assigned) : null,
+      assigned_segment_slugs: segmentsByApp.get(app.id) || [],
     };
   });
 

@@ -301,6 +301,8 @@ export interface VolunteerApplication {
   selected_phase: string | null;
   payment_amount: number;
   discount_value: number;
+  discount_assigned: number | null;
+  assigned_segment_slugs: string[];
 }
 
 export interface VolunteerMetrics {

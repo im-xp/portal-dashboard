@@ -227,12 +227,14 @@ async function nocoFetch<T>(endpoint: string, retries = 2): Promise<T> {
 }
 
 // Paginated fetcher - NocoDB caps at 100 records per page
+// 300ms delay between pages to stay under 5 req/s rate limit
 async function nocoFetchAll<T>(tableId: string, params = ''): Promise<T[]> {
   const PAGE_SIZE = 100;
   const all: T[] = [];
   let offset = 0;
 
   while (true) {
+    if (offset > 0) await delay(300);
     const sep = params ? '&' : '';
     const response = await nocoFetch<NocoDBResponse<T>>(
       `/tables/${tableId}/records?limit=${PAGE_SIZE}&offset=${offset}${sep}${params}`

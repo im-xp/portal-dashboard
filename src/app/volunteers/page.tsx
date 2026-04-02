@@ -89,8 +89,6 @@ export default function VolunteersPage() {
         throw new Error(err.error || `Review failed: ${res.status}`);
       }
 
-      await fetch('/api/refresh', { method: 'POST' });
-
       const savedNotes = options?.coordinator_notes ?? null;
       setData(prev => {
         if (!prev) return prev;

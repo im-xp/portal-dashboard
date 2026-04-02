@@ -96,18 +96,22 @@ async function getCached<T>(key: string): Promise<T | null> {
   }
 }
 
-async function setCache<T>(key: string, data: T): Promise<void> {
+async function setCacheWithTTL<T>(key: string, data: T, freshTTL: number, staleTTL: number): Promise<void> {
   try {
     const redis = await getRedis();
     if (!redis) return;
     const json = JSON.stringify(data);
     await Promise.all([
-      redis.setEx(key, CACHE_TTL, json),
-      redis.setEx(`${key}:stale`, STALE_TTL, json),
+      redis.setEx(key, freshTTL, json),
+      redis.setEx(`${key}:stale`, staleTTL, json),
     ]);
   } catch (e) {
     console.error('Cache set failed:', e);
   }
+}
+
+async function setCache<T>(key: string, data: T): Promise<void> {
+  return setCacheWithTTL(key, data, CACHE_TTL, STALE_TTL);
 }
 
 async function getStaleCached<T>(key: string): Promise<T | null> {
@@ -130,9 +134,44 @@ export async function clearCache(): Promise<void> {
       'dashboard-data', 'dashboard-data:stale',
       'popup-cities', 'popup-cities:stale',
       'volunteer-data', 'volunteer-data:stale',
+      'volunteer-segments', 'volunteer-segments:stale',
     ]);
   } catch (e) {
     console.error('Cache clear failed:', e);
+  }
+}
+
+export async function patchVolunteerInCache(
+  appId: number,
+  updates: { status?: string; coordinator_notes?: string | null; discount_assigned?: number | null; assigned_segment_slugs?: string[] }
+): Promise<void> {
+  try {
+    const redis = await getRedis();
+    if (!redis) return;
+    const raw = await redis.get('volunteer-data');
+    if (!raw) return;
+    const data: VolunteerDashboardData = JSON.parse(raw);
+
+    data.applications = data.applications.map(a =>
+      a.id === appId ? { ...a, ...updates } : a
+    );
+    data.metrics = {
+      total: data.applications.length,
+      drafts: data.applications.filter(a => a.status === 'draft').length,
+      inReview: data.applications.filter(a => a.status === 'in review').length,
+      approved: data.applications.filter(a => a.status === 'accepted').length,
+      rejected: data.applications.filter(a => a.status === 'rejected').length,
+      confirmed: data.applications.filter(a => a.payment_status === 'paid').length,
+    };
+
+    const json = JSON.stringify(data);
+    await Promise.all([
+      redis.setEx('volunteer-data', CACHE_TTL, json),
+      redis.setEx('volunteer-data:stale', STALE_TTL, json),
+      redis.del('volunteer-segments'),
+    ]);
+  } catch (e) {
+    console.error('Cache patch failed:', e);
   }
 }
 
@@ -624,32 +663,35 @@ export async function getVolunteerData(): Promise<VolunteerDashboardData> {
   if (cached) return cached;
 
   const stale = await getStaleCached<VolunteerDashboardData>(cacheKey);
-  if (stale) {
-    refreshVolunteerCache().catch(err =>
-      console.error('Background volunteer refresh failed:', err)
-    );
-    return stale;
-  }
+  if (stale) return stale;
 
-  return refreshVolunteerCache();
+  // No cache at all (first ever load, or full cache expiry). Try synchronous refresh.
+  try {
+    return await refreshVolunteerCache();
+  } catch (error) {
+    console.error('Volunteer data fetch failed with no cache fallback:', error);
+    throw error;
+  }
 }
 
-async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
-  const cacheKey = 'volunteer-data';
-  const rawApps = await nocoFetchAll<RawVolunteerApp>(
-    TABLES.applications,
-    `where=(popup_city_id,eq,${VOLUNTEER_POPUP_CITY_ID})`
-  );
+const SEGMENT_CACHE_FRESH = 1800; // 30 min
+const SEGMENT_CACHE_STALE = 3600; // 1 hour
 
-  // Fetch payments, payment products, and segments sequentially (NocoDB 429s on concurrent)
-  await delay(500);
-  const allPayments = await getPayments();
-  await delay(500);
-  const allPaymentProducts = await getPaymentProducts();
+interface RawSegment { id: number; name: string; slug: string }
 
-  // Fetch segments and their linked applications
-  await delay(500);
-  interface RawSegment { id: number; name: string; slug: string }
+async function getSegmentAssignments(): Promise<Map<number, string[]>> {
+  const cacheKey = 'volunteer-segments';
+
+  const cached = await getCached<Record<string, string[]>>(cacheKey);
+  if (cached) return new Map(Object.entries(cached).map(([k, v]) => [Number(k), v]));
+
+  const stale = await getStaleCached<Record<string, string[]>>(cacheKey);
+  if (stale) return new Map(Object.entries(stale).map(([k, v]) => [Number(k), v]));
+
+  return refreshSegmentAssignments();
+}
+
+async function refreshSegmentAssignments(): Promise<Map<number, string[]>> {
   const segments = await nocoFetchAll<RawSegment>(TABLES.productSegments);
   const segmentsByApp = new Map<number, string[]>();
   for (const seg of segments) {
@@ -663,6 +705,26 @@ async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
       segmentsByApp.set(app.id, existing);
     }
   }
+  const obj = Object.fromEntries(segmentsByApp);
+  await setCacheWithTTL('volunteer-segments', obj, SEGMENT_CACHE_FRESH, SEGMENT_CACHE_STALE);
+  return segmentsByApp;
+}
+
+export async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
+  const cacheKey = 'volunteer-data';
+  const rawApps = await nocoFetchAll<RawVolunteerApp>(
+    TABLES.applications,
+    `where=(popup_city_id,eq,${VOLUNTEER_POPUP_CITY_ID})`
+  );
+
+  // Fetch payments and payment products sequentially (NocoDB 429s on concurrent)
+  await delay(500);
+  const allPayments = await getPayments();
+  await delay(500);
+  const allPaymentProducts = await getPaymentProducts();
+
+  // Segment assignments are cached separately (30 min) since they rarely change
+  const segmentsByApp = await getSegmentAssignments();
 
   // Build lookup: application_id -> approved payment + its products
   const volunteerAppIds = new Set(rawApps.map(a => a.id));

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { reviewApplication } from '@/lib/edgeos-api';
+import { patchVolunteerInCache } from '@/lib/nocodb';
 import type { ReviewApplicationBody } from '@/lib/types';
 
 export async function PATCH(
@@ -25,6 +26,14 @@ export async function PATCH(
 
   try {
     const result = await reviewApplication(applicationId, body);
+
+    await patchVolunteerInCache(applicationId, {
+      status: body.status,
+      coordinator_notes: body.coordinator_notes ?? null,
+      discount_assigned: body.discount_assigned ?? null,
+      assigned_segment_slugs: body.segment_slugs ?? [],
+    });
+
     return NextResponse.json(result);
   } catch (error) {
     console.error(`[API] Failed to review application ${applicationId}:`, error);

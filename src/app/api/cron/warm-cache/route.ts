@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
-import { refreshDashboardCache } from '@/lib/nocodb';
+import { refreshDashboardCache, refreshVolunteerCache } from '@/lib/nocodb';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -10,14 +12,35 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const results: Record<string, { ok: boolean; durationMs: number; error?: string }> = {};
+  const start = Date.now();
+
   try {
-    const start = Date.now();
+    const t0 = Date.now();
     await refreshDashboardCache();
-    const duration = Date.now() - start;
-    console.log(`[Cache Warm] Dashboard cache refreshed in ${duration}ms`);
-    return NextResponse.json({ success: true, durationMs: duration, warmedAt: new Date().toISOString() });
+    results.dashboard = { ok: true, durationMs: Date.now() - t0 };
   } catch (error) {
-    console.error('[Cache Warm] Failed:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    console.error('[Cache Warm] Dashboard failed:', error);
+    results.dashboard = { ok: false, durationMs: Date.now() - start, error: String(error) };
   }
+
+  await delay(1000);
+
+  try {
+    const t0 = Date.now();
+    await refreshVolunteerCache();
+    results.volunteer = { ok: true, durationMs: Date.now() - t0 };
+  } catch (error) {
+    console.error('[Cache Warm] Volunteer failed:', error);
+    results.volunteer = { ok: false, durationMs: Date.now() - (start + 1000), error: String(error) };
+  }
+
+  const totalMs = Date.now() - start;
+  console.log(`[Cache Warm] Done in ${totalMs}ms:`, JSON.stringify(results));
+
+  const allOk = Object.values(results).every(r => r.ok);
+  return NextResponse.json(
+    { success: allOk, durationMs: totalMs, results, warmedAt: new Date().toISOString() },
+    { status: allOk ? 200 : 207 }
+  );
 }

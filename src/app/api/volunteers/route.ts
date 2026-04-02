@@ -21,6 +21,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error('[API] Volunteer data error:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return NextResponse.json(
+      { error: 'temporarily_unavailable', message: 'Volunteer data is refreshing. Please try again in a moment.' },
+      { status: 503 }
+    );
   }
 }

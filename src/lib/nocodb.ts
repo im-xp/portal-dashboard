@@ -641,26 +641,33 @@ async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
     `where=(popup_city_id,eq,${VOLUNTEER_POPUP_CITY_ID})`
   );
 
-  // Fetch payments and payment products (with delays to avoid NocoDB 429s)
-  await delay(500);
-  const allPayments = await getPayments();
-  await delay(500);
-  const allPaymentProducts = await getPaymentProducts();
-
-  // Fetch segment assignments: for each segment, get linked app IDs
+  // Fetch payments, payment products, and segments in parallel batches
+  // Batch 1: payments + segments table (independent)
   await delay(500);
   interface RawSegment { id: number; name: string; slug: string }
-  const segments = await nocoFetchAll<RawSegment>(TABLES.productSegments);
+  const [allPayments, segments] = await Promise.all([
+    getPayments(),
+    nocoFetchAll<RawSegment>(TABLES.productSegments),
+  ]);
+
+  // Batch 2: payment products + segment link queries (independent)
+  await delay(500);
+  const [allPaymentProducts, ...segmentLinks] = await Promise.all([
+    getPaymentProducts(),
+    ...segments.map(seg =>
+      nocoFetchLinks<{ id: number }>(
+        TABLES.productSegments, LINK_FIELDS.segmentApplications, seg.id
+      ).then(linked => ({ slug: seg.slug, appIds: linked.map(a => a.id) }))
+    ),
+  ]);
+
+  // Build segment lookup
   const segmentsByApp = new Map<number, string[]>();
-  for (const seg of segments) {
-    await delay(300);
-    const linked = await nocoFetchLinks<{ id: number }>(
-      TABLES.productSegments, LINK_FIELDS.segmentApplications, seg.id
-    );
-    for (const app of linked) {
-      const existing = segmentsByApp.get(app.id) || [];
-      existing.push(seg.slug);
-      segmentsByApp.set(app.id, existing);
+  for (const { slug, appIds } of segmentLinks) {
+    for (const appId of appIds) {
+      const existing = segmentsByApp.get(appId) || [];
+      existing.push(slug);
+      segmentsByApp.set(appId, existing);
     }
   }
 

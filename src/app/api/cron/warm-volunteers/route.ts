@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { refreshDashboardCache } from '@/lib/nocodb';
+import { refreshVolunteerCache } from '@/lib/nocodb';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -12,12 +12,12 @@ export async function GET(request: Request) {
 
   try {
     const start = Date.now();
-    await refreshDashboardCache();
+    await refreshVolunteerCache();
     const duration = Date.now() - start;
-    console.log(`[Cache Warm] Dashboard cache refreshed in ${duration}ms`);
+    console.log(`[Cache Warm] Volunteer cache refreshed in ${duration}ms`);
     return NextResponse.json({ success: true, durationMs: duration, warmedAt: new Date().toISOString() });
   } catch (error) {
-    console.error('[Cache Warm] Failed:', error);
+    console.error('[Cache Warm] Volunteer failed:', error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

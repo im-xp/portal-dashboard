@@ -22,7 +22,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
-import { HandHeart, FileText, Clock, CheckCircle, XCircle, Search, Loader2, X, BadgeCheck, DollarSign } from 'lucide-react';
+import { HandHeart, FileText, Clock, CheckCircle, XCircle, Search, Loader2, X, BadgeCheck, DollarSign, Download } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { VolunteerDashboardData, VolunteerApplication, ProductSegment } from '@/lib/types';
@@ -142,6 +142,74 @@ export default function VolunteersPage() {
     });
   }, [data, statusFilter, search]);
 
+  const handleExportCsv = useCallback(() => {
+    if (!filteredApplications.length) return;
+
+    const csvEscape = (val: string): string => {
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    };
+
+    const joinArray = (items?: string[] | string): string => {
+      if (!items) return '';
+      if (typeof items === 'string') return items;
+      return items.join('; ');
+    };
+
+    const columns = [
+      'Name', 'Email', 'Status', 'Payment Status', 'Residence', 'Location', 'Phone',
+      'Volunteer Type', 'Available Phases', 'Team Preferences', 'Skills',
+      'Skills Description', 'Festival Experience', 'Build Experience', 'Team Contribution',
+      'Eclipse Attendance', 'Staff Referral', 'Referral Name',
+      'Emergency Contact Name', 'Emergency Contact Phone',
+      'Selected Phase', 'Payment Amount', 'Discount Assigned', 'Coordinator Notes',
+      'Submitted', 'Created',
+    ];
+
+    const rows = filteredApplications.map(app => {
+      const cd = app.custom_data;
+      return [
+        cd?.full_name || '',
+        app.email,
+        app.status,
+        app.payment_status,
+        app.residence || '',
+        [cd?.city_town, cd?.state_option].filter(Boolean).join(', '),
+        cd?.phone_number || '',
+        cd?.volunteer_type || '',
+        joinArray(cd?.available_phases),
+        joinArray(cd?.team_preferences),
+        joinArray(cd?.talents_skills),
+        cd?.skills_description || '',
+        cd?.festival_experience || '',
+        cd?.build_experience || '',
+        cd?.team_contribution || '',
+        cd?.eclipse_attendance || '',
+        cd?.staff_referral || '',
+        cd?.referral_name || '',
+        cd?.emergency_contact_name || '',
+        cd?.emergency_contact_phone || '',
+        app.selected_phase || '',
+        app.payment_amount ? String(app.payment_amount) : '',
+        app.discount_assigned != null ? String(app.discount_assigned) : '',
+        app.coordinator_notes || '',
+        app.submitted_at ? format(new Date(app.submitted_at), 'yyyy-MM-dd') : '',
+        format(new Date(app.created_at), 'yyyy-MM-dd'),
+      ].map(v => csvEscape(String(v)));
+    });
+
+    const csv = [columns.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `volunteers-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filteredApplications]);
+
   const statusTabs: { label: string; value: StatusFilter; count: number }[] = [
     { label: 'All', value: 'all', count: data?.metrics.total || 0 },
     { label: 'Draft', value: 'draft', count: data?.metrics.drafts || 0 },
@@ -243,14 +311,25 @@ export default function VolunteersPage() {
               </button>
             ))}
           </div>
-          <div className="relative sm:ml-auto sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-            <Input
-              placeholder="Search name or email..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex items-center gap-2 sm:ml-auto">
+            <div className="relative sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+              <Input
+                placeholder="Search name or email..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={!filteredApplications.length}
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              Export
+            </Button>
           </div>
         </div>
 

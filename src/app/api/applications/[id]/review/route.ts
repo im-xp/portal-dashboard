@@ -20,8 +20,8 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  if (body.status !== 'accepted' && body.status !== 'rejected') {
-    return NextResponse.json({ error: 'status must be "accepted" or "rejected"' }, { status: 400 });
+  if (body.status !== 'accepted' && body.status !== 'rejected' && body.status !== 'withdrawn') {
+    return NextResponse.json({ error: 'status must be "accepted", "rejected", or "withdrawn"' }, { status: 400 });
   }
 
   try {

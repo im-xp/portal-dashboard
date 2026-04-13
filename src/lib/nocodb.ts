@@ -161,6 +161,7 @@ export async function patchVolunteerInCache(
       inReview: data.applications.filter(a => a.status === 'in review').length,
       approved: data.applications.filter(a => a.status === 'accepted').length,
       rejected: data.applications.filter(a => a.status === 'rejected').length,
+      withdrawn: data.applications.filter(a => a.status === 'withdrawn').length,
       confirmed: data.applications.filter(a => a.payment_status === 'paid').length,
     };
 
@@ -791,6 +792,7 @@ export async function refreshVolunteerCache(): Promise<VolunteerDashboardData> {
     inReview: applications.filter(a => a.status === 'in review').length,
     approved: applications.filter(a => a.status === 'accepted').length,
     rejected: applications.filter(a => a.status === 'rejected').length,
+    withdrawn: applications.filter(a => a.status === 'withdrawn').length,
     confirmed: applications.filter(a => a.payment_status === 'paid').length,
   };
 

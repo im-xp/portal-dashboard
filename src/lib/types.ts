@@ -249,7 +249,7 @@ export interface ProductSegment {
 }
 
 export interface ReviewApplicationBody {
-  status: 'accepted' | 'rejected';
+  status: 'accepted' | 'rejected' | 'withdrawn';
   discount_assigned?: number;
   segment_slugs?: string[];
   coordinator_notes?: string | null;
@@ -311,6 +311,7 @@ export interface VolunteerMetrics {
   inReview: number;
   approved: number;
   rejected: number;
+  withdrawn: number;
   confirmed: number;
 }
 

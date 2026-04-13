@@ -22,12 +22,12 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
-import { HandHeart, FileText, Clock, CheckCircle, XCircle, Search, Loader2, X, BadgeCheck, DollarSign, Download } from 'lucide-react';
+import { HandHeart, FileText, Clock, CheckCircle, XCircle, Search, Loader2, X, BadgeCheck, DollarSign, Download, Ban } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { VolunteerDashboardData, VolunteerApplication, ProductSegment } from '@/lib/types';
 
-type StatusFilter = 'all' | 'draft' | 'in review' | 'accepted' | 'rejected' | 'confirmed';
+type StatusFilter = 'all' | 'draft' | 'in review' | 'accepted' | 'rejected' | 'withdrawn' | 'confirmed';
 
 export default function VolunteersPage() {
   const [data, setData] = useState<VolunteerDashboardData | null>(null);
@@ -62,7 +62,7 @@ export default function VolunteersPage() {
 
   const handleReview = useCallback(async (
     appId: number,
-    status: 'accepted' | 'rejected',
+    status: 'accepted' | 'rejected' | 'withdrawn',
     options?: { discount_assigned?: number; segment_slugs?: string[]; coordinator_notes?: string }
   ) => {
     setReviewLoading(true);
@@ -101,6 +101,7 @@ export default function VolunteersPage() {
           inReview: updated.filter(a => a.status === 'in review').length,
           approved: updated.filter(a => a.status === 'accepted').length,
           rejected: updated.filter(a => a.status === 'rejected').length,
+          withdrawn: updated.filter(a => a.status === 'withdrawn').length,
           confirmed: updated.filter(a => a.payment_status === 'paid').length,
         };
         return { metrics, applications: updated };
@@ -217,6 +218,7 @@ export default function VolunteersPage() {
     { label: 'Approved', value: 'accepted', count: data?.metrics.approved || 0 },
     { label: 'Confirmed', value: 'confirmed', count: data?.metrics.confirmed || 0 },
     { label: 'Rejected', value: 'rejected', count: data?.metrics.rejected || 0 },
+    { label: 'Withdrawn', value: 'withdrawn', count: data?.metrics.withdrawn || 0 },
   ];
 
   if (loading) {
@@ -425,7 +427,7 @@ interface VolunteerDetailProps {
   segments: ProductSegment[];
   reviewLoading: boolean;
   reviewError: string | null;
-  onReview: (appId: number, status: 'accepted' | 'rejected', options?: { discount_assigned?: number; segment_slugs?: string[]; coordinator_notes?: string }) => void;
+  onReview: (appId: number, status: 'accepted' | 'rejected' | 'withdrawn', options?: { discount_assigned?: number; segment_slugs?: string[]; coordinator_notes?: string }) => void;
 }
 
 function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }: VolunteerDetailProps) {
@@ -434,7 +436,7 @@ function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }
   const [discount, setDiscount] = useState(app.discount_assigned != null ? String(app.discount_assigned) : '');
   const [notes, setNotes] = useState(app.coordinator_notes || '');
 
-  const canReview = app.status === 'in review' || app.status === 'accepted' || app.status === 'rejected';
+  const canReview = app.status === 'in review' || app.status === 'accepted' || app.status === 'rejected' || app.status === 'withdrawn';
 
   const handleAccept = () => {
     if (segments.length > 0 && selectedSegmentSlugs.length === 0) return;
@@ -448,6 +450,14 @@ function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }
 
   const handleReject = () => {
     onReview(app.id, 'rejected', {
+      coordinator_notes: notes.trim() || undefined,
+    });
+  };
+
+  const handleWithdraw = () => {
+    const name = cd?.full_name || app.email;
+    if (!window.confirm(`Withdraw ${name}'s application? They will not receive an email notification.`)) return;
+    onReview(app.id, 'withdrawn', {
       coordinator_notes: notes.trim() || undefined,
     });
   };
@@ -583,6 +593,15 @@ function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }
                   {reviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
                   Reject
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleWithdraw}
+                  disabled={reviewLoading || app.status === 'withdrawn'}
+                  className="flex-1"
+                >
+                  {reviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                  Withdraw
+                </Button>
               </div>
             </div>
 
@@ -690,6 +709,7 @@ function StatusBadge({ status }: { status: string }) {
     'in review': 'bg-amber-50 text-amber-700 border-amber-200',
     accepted: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     rejected: 'bg-red-50 text-red-700 border-red-200',
+    withdrawn: 'bg-orange-50 text-orange-700 border-orange-200',
   };
 
   return (

@@ -249,7 +249,10 @@ async function nocoFetchAll<T>(tableId: string, params = ''): Promise<T[]> {
 }
 
 async function nocoFetchLinks<T>(tableId: string, linkFieldId: string, recordId: number): Promise<T[]> {
-  const PAGE_SIZE = 200;
+  // NocoDB clamps the link-records endpoint to a max page of 100, regardless of `limit`.
+  // If we request more, we still only get 100 back, and length < requested-PAGE_SIZE
+  // would short-circuit the loop and silently drop everything past page 1.
+  const PAGE_SIZE = 100;
   const all: T[] = [];
   let offset = 0;
 
@@ -258,7 +261,7 @@ async function nocoFetchLinks<T>(tableId: string, linkFieldId: string, recordId:
       `/tables/${tableId}/links/${linkFieldId}/records/${recordId}?limit=${PAGE_SIZE}&offset=${offset}`
     );
     all.push(...response.list);
-    if (response.pageInfo.isLastPage || response.list.length < PAGE_SIZE) break;
+    if (response.pageInfo.isLastPage) break;
     offset += PAGE_SIZE;
   }
 

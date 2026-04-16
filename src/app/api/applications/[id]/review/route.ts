@@ -24,6 +24,13 @@ export async function PATCH(
     return NextResponse.json({ error: 'status must be "accepted", "rejected", or "withdrawn"' }, { status: 400 });
   }
 
+  if (body.status === 'accepted' && (!body.segment_slugs || body.segment_slugs.length === 0)) {
+    return NextResponse.json(
+      { error: 'segment_slugs must include at least one product segment when accepting' },
+      { status: 400 }
+    );
+  }
+
   try {
     const result = await reviewApplication(applicationId, body);
 

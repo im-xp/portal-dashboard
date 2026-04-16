@@ -1,4 +1,5 @@
 import { createClient, type RedisClientType } from 'redis';
+import { after } from 'next/server';
 import type {
   NocoDBResponse,
   Application,
@@ -168,7 +169,10 @@ export async function patchVolunteerInCache(
     const json = JSON.stringify(data);
     await Promise.all([
       redis.setEx('volunteer-data', CACHE_TTL, json),
-      redis.setEx('volunteer-data:stale', STALE_TTL, json),
+      // Update stale value but preserve its existing TTL (XX = only if exists).
+      // Resetting the stale TTL on every patch made stale data effectively immortal,
+      // which prevented the stale-while-revalidate refresh from ever kicking in.
+      redis.set('volunteer-data:stale', json, { expiration: 'KEEPTTL', condition: 'XX' }),
       redis.del('volunteer-segments'),
     ]);
   } catch (e) {
@@ -662,6 +666,28 @@ function parseCustomData(raw: string | VolunteerCustomData | null): VolunteerCus
   }
 }
 
+let volunteerRefreshInFlight: Promise<unknown> | null = null;
+
+function triggerVolunteerBackgroundRefresh(): void {
+  if (volunteerRefreshInFlight) return;
+  const work = refreshVolunteerCache()
+    .then(() => {
+      console.log('[Background refresh] volunteer cache refreshed');
+    })
+    .catch(err => {
+      console.error('[Background refresh] volunteer cache failed:', err);
+    })
+    .finally(() => {
+      volunteerRefreshInFlight = null;
+    });
+  volunteerRefreshInFlight = work;
+  try {
+    after(work);
+  } catch {
+    // after() throws if not inside a request scope (e.g. cron). Promise still runs.
+  }
+}
+
 export async function getVolunteerData(): Promise<VolunteerDashboardData> {
   const cacheKey = 'volunteer-data';
 
@@ -669,9 +695,12 @@ export async function getVolunteerData(): Promise<VolunteerDashboardData> {
   if (cached) return cached;
 
   const stale = await getStaleCached<VolunteerDashboardData>(cacheKey);
-  if (stale) return stale;
+  if (stale) {
+    triggerVolunteerBackgroundRefresh();
+    return stale;
+  }
 
-  // No cache at all (first ever load, or full cache expiry). Try synchronous refresh.
+  // No cache at all (first ever load, or full cache expiry). Synchronous refresh.
   try {
     return await refreshVolunteerCache();
   } catch (error) {

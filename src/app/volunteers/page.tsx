@@ -37,8 +37,27 @@ export default function VolunteersPage() {
   const [selectedApp, setSelectedApp] = useState<VolunteerApplication | null>(null);
 
   const [segments, setSegments] = useState<ProductSegment[]>([]);
+  const [segmentsStatus, setSegmentsStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+
+  const loadSegments = useCallback(() => {
+    setSegmentsStatus('loading');
+    fetch('/api/segments?popup_city_slug=iceland-eclipse-volunteers')
+      .then(async r => {
+        if (!r.ok) throw new Error(`Segments API ${r.status}`);
+        return r.json() as Promise<ProductSegment[]>;
+      })
+      .then(data => {
+        setSegments(data);
+        setSegmentsStatus('loaded');
+      })
+      .catch(err => {
+        console.error('Failed to fetch segments:', err);
+        setSegments([]);
+        setSegmentsStatus('error');
+      });
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -53,12 +72,8 @@ export default function VolunteersPage() {
       }
     }
     fetchData();
-
-    fetch('/api/segments?popup_city_slug=iceland-eclipse-volunteers')
-      .then(r => r.ok ? r.json() : [])
-      .then(setSegments)
-      .catch(() => setSegments([]));
-  }, []);
+    loadSegments();
+  }, [loadSegments]);
 
   const handleReview = useCallback(async (
     appId: number,
@@ -92,9 +107,15 @@ export default function VolunteersPage() {
       const savedNotes = options?.coordinator_notes ?? null;
       setData(prev => {
         if (!prev) return prev;
-        const updated = prev.applications.map(a =>
-          a.id === appId ? { ...a, status, coordinator_notes: savedNotes !== undefined ? savedNotes : a.coordinator_notes } : a
-        );
+        const updated = prev.applications.map(a => {
+          if (a.id !== appId) return a;
+          const next: VolunteerApplication = { ...a, status, coordinator_notes: savedNotes };
+          if (status === 'accepted') {
+            if (options?.segment_slugs) next.assigned_segment_slugs = options.segment_slugs;
+            if (options?.discount_assigned != null) next.discount_assigned = options.discount_assigned;
+          }
+          return next;
+        });
         const metrics = {
           total: updated.length,
           drafts: updated.filter(a => a.status === 'draft').length,
@@ -411,6 +432,8 @@ export default function VolunteersPage() {
             <VolunteerDetail
               app={selectedApp}
               segments={segments}
+              segmentsStatus={segmentsStatus}
+              onRetrySegments={loadSegments}
               reviewLoading={reviewLoading}
               reviewError={reviewError}
               onReview={handleReview}
@@ -425,12 +448,14 @@ export default function VolunteersPage() {
 interface VolunteerDetailProps {
   app: VolunteerApplication;
   segments: ProductSegment[];
+  segmentsStatus: 'loading' | 'loaded' | 'error';
+  onRetrySegments: () => void;
   reviewLoading: boolean;
   reviewError: string | null;
   onReview: (appId: number, status: 'accepted' | 'rejected' | 'withdrawn', options?: { discount_assigned?: number; segment_slugs?: string[]; coordinator_notes?: string }) => void;
 }
 
-function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }: VolunteerDetailProps) {
+function VolunteerDetail({ app, segments, segmentsStatus, onRetrySegments, reviewLoading, reviewError, onReview }: VolunteerDetailProps) {
   const cd = app.custom_data;
   const [selectedSegmentSlugs, setSelectedSegmentSlugs] = useState<string[]>(app.assigned_segment_slugs || []);
   const [discount, setDiscount] = useState(app.discount_assigned != null ? String(app.discount_assigned) : '');
@@ -438,8 +463,13 @@ function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }
 
   const canReview = app.status === 'in review' || app.status === 'accepted' || app.status === 'rejected' || app.status === 'withdrawn';
 
+  const segmentsRequired = segmentsStatus !== 'loaded' || segments.length > 0;
+  const acceptBlocked =
+    segmentsStatus !== 'loaded' ||
+    (segments.length > 0 && selectedSegmentSlugs.length === 0);
+
   const handleAccept = () => {
-    if (segments.length > 0 && selectedSegmentSlugs.length === 0) return;
+    if (acceptBlocked) return;
     const discountNum = parseInt(discount, 10);
     onReview(app.id, 'accepted', {
       discount_assigned: !isNaN(discountNum) ? Math.min(100, Math.max(0, discountNum)) : undefined,
@@ -532,39 +562,65 @@ function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }
                 />
               </div>
 
-              {segments.length > 0 && (
+              {segmentsRequired && (
                 <div>
                   <label className="text-sm text-zinc-600 block mb-2">
                     Product Segments <span className="text-red-500">*</span>
                   </label>
-                  <div className="space-y-2">
-                    {segments.map(seg => (
-                      <label
-                        key={seg.slug}
-                        className={cn(
-                          'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
-                          selectedSegmentSlugs.includes(seg.slug)
-                            ? 'border-zinc-900 bg-white'
-                            : 'border-zinc-200 hover:border-zinc-300 bg-white'
-                        )}
+
+                  {segmentsStatus === 'loading' && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-zinc-50 border border-zinc-200 text-sm text-zinc-600">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading segments...
+                    </div>
+                  )}
+
+                  {segmentsStatus === 'error' && (
+                    <div className="flex items-start justify-between gap-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                      <div className="flex items-start gap-2">
+                        <X className="h-4 w-4 mt-0.5 shrink-0" />
+                        <span>Failed to load segments. Accept is disabled until they load.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={onRetrySegments}
+                        className="text-xs font-medium underline hover:no-underline shrink-0"
                       >
-                        <input
-                          type="checkbox"
-                          checked={selectedSegmentSlugs.includes(seg.slug)}
-                          onChange={() => setSelectedSegmentSlugs(prev =>
-                            prev.includes(seg.slug) ? prev.filter(s => s !== seg.slug) : [...prev, seg.slug]
+                        Retry
+                      </button>
+                    </div>
+                  )}
+
+                  {segmentsStatus === 'loaded' && segments.length > 0 && (
+                    <div className="space-y-2">
+                      {segments.map(seg => (
+                        <label
+                          key={seg.slug}
+                          className={cn(
+                            'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                            selectedSegmentSlugs.includes(seg.slug)
+                              ? 'border-zinc-900 bg-white'
+                              : 'border-zinc-200 hover:border-zinc-300 bg-white'
                           )}
-                          className="mt-0.5 rounded"
-                        />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{seg.name}</p>
-                          {seg.description && (
-                            <p className="text-xs text-zinc-500 mt-0.5">{seg.description}</p>
-                          )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedSegmentSlugs.includes(seg.slug)}
+                            onChange={() => setSelectedSegmentSlugs(prev =>
+                              prev.includes(seg.slug) ? prev.filter(s => s !== seg.slug) : [...prev, seg.slug]
+                            )}
+                            className="mt-0.5 rounded"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{seg.name}</p>
+                            {seg.description && (
+                              <p className="text-xs text-zinc-500 mt-0.5">{seg.description}</p>
+                            )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -578,7 +634,7 @@ function VolunteerDetail({ app, segments, reviewLoading, reviewError, onReview }
               <div className="flex gap-3">
                 <Button
                   onClick={handleAccept}
-                  disabled={reviewLoading || (segments.length > 0 && selectedSegmentSlugs.length === 0)}
+                  disabled={reviewLoading || acceptBlocked}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
                   {reviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}

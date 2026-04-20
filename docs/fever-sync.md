@@ -33,15 +33,15 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "plan_ids": [123, 456],
   "date_field": "CREATED_DATE_UTC",
   "date_from": "2026-01-01",
   "date_to": "2026-02-13"
 }
 ```
 
-- `plan_ids` (required): From `FEVER_PLAN_IDS` env var, comma-separated integers. These are the specific Fever event plans we track.
 - `date_field` / `date_from` / `date_to` (optional): For incremental syncs, filters to orders created after last sync.
+- We omit `plan_ids` so the search returns every order on the account. This way new plans (e.g. shuttles, add-ons) show up automatically without a config change.
+- Other accepted filters the API supports but we don't use: `order_ids` (array of specific order IDs — handy for one-off lookups).
 
 Returns `{ "search_id": "abc-123" }`. The search runs asynchronously on Fever's side.
 
@@ -104,7 +104,6 @@ fever_sync_state (id = 1, single row)
 | `FEVER_USERNAME` | Fever API username |
 | `FEVER_PASSWORD` | Fever API password |
 | `FEVER_HOST` | API host (defaults to `data-reporting-api.prod.feverup.com`) |
-| `FEVER_PLAN_IDS` | Comma-separated plan IDs to fetch (e.g. `123,456,789`) |
 | `FEVER_SLACK_WEBHOOK_URL` | Slack webhook for new order notifications |
 | `CRON_SECRET` | Vercel cron authentication token |
 
@@ -248,7 +247,5 @@ curl -X POST "https://dashboard.icelandeclipse.com/api/cron/fever-sync" \
 **Auth failures**: Fever tokens expire. Each sync run gets a fresh token, so this shouldn't be persistent. If auth fails, check that `FEVER_USERNAME` and `FEVER_PASSWORD` are still valid.
 
 **Poll timeout**: The search can take up to 2 minutes (60 polls x 2s). If Fever's backend is slow, the sync will fail with a timeout. The next cron run will retry.
-
-**Missing plan IDs**: If `FEVER_PLAN_IDS` is empty or wrong, the search will return no results. You need the numeric plan IDs from Fever's dashboard.
 
 **Rate limiting**: Rapid successive syncs (e.g. spamming "Sync Now") can trigger Fever API rate limits. The cron runs every 5 minutes which is well within limits.

@@ -345,17 +345,7 @@ async function startSearch(
   token: string,
   options?: { dateFrom?: string; dateTo?: string }
 ): Promise<string> {
-  const planIdsEnv = process.env.FEVER_PLAN_IDS || '';
-  const planIds = planIdsEnv
-    .split(',')
-    .map((id) => parseInt(id.trim(), 10))
-    .filter((id) => !isNaN(id));
-
-  if (planIds.length === 0) {
-    throw new Error('FEVER_PLAN_IDS env var required (comma-separated plan IDs)');
-  }
-
-  const body: Record<string, unknown> = { plan_ids: planIds };
+  const body: Record<string, unknown> = {};
 
   if (options?.dateFrom) {
     body.date_field = 'CREATED_DATE_UTC';

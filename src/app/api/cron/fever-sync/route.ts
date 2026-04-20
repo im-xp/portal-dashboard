@@ -19,7 +19,7 @@ interface SyncStats {
   errors: string[];
 }
 
-async function runSync(isManual = false): Promise<NextResponse> {
+async function runSync(isManual = false, skipSlack = false): Promise<NextResponse> {
   const stats: SyncStats = {
     ordersProcessed: 0,
     ordersInserted: 0,
@@ -115,7 +115,7 @@ async function runSync(isManual = false): Promise<NextResponse> {
       stats.itemsInserted += batch.length;
     }
 
-    if (newOrders.length > 0 && process.env.FEVER_SLACK_WEBHOOK_URL) {
+    if (!skipSlack && newOrders.length > 0 && process.env.FEVER_SLACK_WEBHOOK_URL) {
       for (const order of newOrders.slice(0, 10)) {
         const orderItems = items.filter((i) => i.feverOrderId === order.feverOrderId);
         const message = formatFeverOrderNotification({
@@ -238,7 +238,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  return runSync(false);
+  const skipSlack = searchParams.get('skipSlack') === 'true';
+  return runSync(false, skipSlack);
 }
 
 export async function POST(request: Request) {
@@ -249,6 +250,7 @@ export async function POST(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const isManual = searchParams.get('manual') === 'true';
+  const skipSlack = searchParams.get('skipSlack') === 'true';
 
-  return runSync(isManual);
+  return runSync(isManual, skipSlack);
 }

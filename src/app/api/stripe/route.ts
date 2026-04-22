@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getPayments } from '@/lib/nocodb';
+import { getPayments, getApplicationPopupMap } from '@/lib/nocodb';
 import type { StripeAccountKey } from '@/lib/stripe';
 
 export const dynamic = 'force-dynamic';
@@ -28,6 +28,16 @@ interface AccountSummary {
 const ACCOUNT_LABELS: Record<StripeAccountKey, string> = {
   portal: 'The Portal',
   iceland: 'Iceland Eclipse',
+};
+
+// Which EdgeOS popup_city_ids each Stripe account services. Portal is the
+// legacy IMXP account and handles all popups (attendees, Ripple, volunteers).
+// Iceland Eclipse is a dedicated account whose charges are NOT tracked in
+// EdgeOS — deduping it against unscoped EdgeOS produces false-positive
+// amount/date collisions (especially $5 app fees), so scope it to nothing.
+const DEDUP_SCOPE: Record<StripeAccountKey, number[]> = {
+  portal: [1, 2, 3],
+  iceland: [],
 };
 
 /**
@@ -69,17 +79,30 @@ async function fetchAllStripeCharges(): Promise<StripeChargeRow[]> {
 
 export async function GET() {
   try {
-    const [charges, payments] = await Promise.all([
+    const [charges, payments, popupByAppId] = await Promise.all([
       fetchAllStripeCharges(),
       getPayments(),
+      getApplicationPopupMap(),
     ]);
 
     const approvedPayments = payments.filter((p) => p.status === 'approved');
 
-    const edgeosIndex = new Set<string>();
+    // Per-popup (amount, date) index. Each Stripe account only dedups against
+    // the popups its DEDUP_SCOPE whitelists — keeps $5 app-fee collisions
+    // between Portal EdgeOS records and Iceland Stripe charges from creating
+    // false positives.
+    const indexByPopup = new Map<number, Set<string>>();
     for (const p of approvedPayments) {
+      const popup = popupByAppId.get(p.application_id);
+      if (popup === undefined) continue;
       const amountCents = Math.round(p.amount * 100);
-      edgeosIndex.add(dedupKey(amountCents, dateKey(p.created_at)));
+      const key = dedupKey(amountCents, dateKey(p.created_at));
+      let idx = indexByPopup.get(popup);
+      if (!idx) {
+        idx = new Set();
+        indexByPopup.set(popup, idx);
+      }
+      idx.add(key);
     }
 
     const summaries: Record<StripeAccountKey, AccountSummary> = {
@@ -114,7 +137,9 @@ export async function GET() {
       summary.grossCount += 1;
 
       const key = dedupKey(c.amount_cents, dateKey(c.created_at));
-      if (edgeosIndex.has(key)) {
+      const scopedPopups = DEDUP_SCOPE[c.account_key] ?? [];
+      const matched = scopedPopups.some((popup) => indexByPopup.get(popup)?.has(key));
+      if (matched) {
         summary.edgeosMatchedTotal += amount;
         summary.edgeosMatchedCount += 1;
       } else {

@@ -1,7 +1,14 @@
 /**
  * Verify /api/stripe numbers against the baseline from the plan.
- * Pulls charges from Supabase + approved payments from NocoDB, runs the
- * same dedup the API route runs, and prints the per-account + combined net.
+ *
+ * Dedup is per-Stripe-account, scoped to the popup_city_ids that
+ * each Stripe account actually services:
+ *  - Portal (acct_1ST3U3): legacy IMXP account, services all popups (1,2,3)
+ *  - Iceland (acct_1SUU6n): dedicated account, EdgeOS does NOT track it
+ *
+ * Without the per-account scope, Portal's $5 application-fee records
+ * collide with Iceland's $5 charges on the same day and produce false
+ * "matches" that deflate Iceland net.
  *
  * Usage: npx tsx scripts/verify-stripe.ts
  */
@@ -10,7 +17,7 @@ import { config } from 'dotenv';
 config({ path: '.env.local' });
 
 import { supabase } from '../src/lib/supabase';
-import { getPayments } from '../src/lib/nocodb';
+import { getPayments, getApplicationPopupMap } from '../src/lib/nocodb';
 
 interface ChargeRow {
   id: string;
@@ -20,18 +27,24 @@ interface ChargeRow {
   amount_refunded_cents: number | null;
 }
 
+const DEDUP_SCOPE: Record<'portal' | 'iceland', number[]> = {
+  portal: [1, 2, 3],
+  iceland: [],
+};
+
 function dateKey(iso: string): string {
   return iso.slice(0, 10);
 }
 
 async function main() {
-  const [{ data: charges, error }, payments] = await Promise.all([
+  const [{ data: charges, error }, payments, popupByAppId] = await Promise.all([
     supabase
       .from('stripe_charges')
       .select('id, account_key, amount_cents, created_at, amount_refunded_cents')
       .eq('status', 'succeeded')
       .eq('refunded', false),
     getPayments(),
+    getApplicationPopupMap(),
   ]);
 
   if (error) throw error;
@@ -41,12 +54,26 @@ async function main() {
 
   console.log(`Charges (succeeded, not refunded): ${charges.length}`);
   console.log(`EdgeOS approved payments: ${approved.length}`);
+  console.log(`Applications resolved to popup: ${popupByAppId.size}`);
 
-  const edgeosIndex = new Set<string>();
+  const indexByPopup = new Map<number, Set<string>>();
+  let unresolved = 0;
   for (const p of approved) {
+    const popup = popupByAppId.get(p.application_id);
+    if (popup === undefined) {
+      unresolved++;
+      continue;
+    }
     const amountCents = Math.round(p.amount * 100);
-    edgeosIndex.add(`${amountCents}|${dateKey(p.created_at)}`);
+    const key = `${amountCents}|${dateKey(p.created_at)}`;
+    let idx = indexByPopup.get(popup);
+    if (!idx) {
+      idx = new Set();
+      indexByPopup.set(popup, idx);
+    }
+    idx.add(key);
   }
+  if (unresolved > 0) console.log(`  (${unresolved} payments had unresolved application popup)`);
 
   const summary = {
     portal: { gross: 0, net: 0, matched: 0, grossCount: 0, netCount: 0, matchedCount: 0 },
@@ -61,7 +88,9 @@ async function main() {
     s.grossCount += 1;
 
     const key = `${c.amount_cents}|${dateKey(c.created_at)}`;
-    if (edgeosIndex.has(key)) {
+    const popups = DEDUP_SCOPE[c.account_key];
+    const matched = popups.some((popup) => indexByPopup.get(popup)?.has(key));
+    if (matched) {
       s.matched += amount;
       s.matchedCount += 1;
     } else {

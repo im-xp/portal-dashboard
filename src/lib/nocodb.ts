@@ -283,6 +283,16 @@ export async function getApplications(): Promise<Application[]> {
   );
 }
 
+export async function getApplicationPopupMap(): Promise<Map<number, number>> {
+  const rows = await nocoFetchAll<{ id: number; popup_city_id: number }>(
+    TABLES.applications,
+    `fields=id,popup_city_id`
+  );
+  const map = new Map<number, number>();
+  for (const r of rows) map.set(r.id, r.popup_city_id);
+  return map;
+}
+
 export async function getAttendees(): Promise<Attendee[]> {
   return nocoFetchAll<Attendee>(TABLES.attendees);
 }

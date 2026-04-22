@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Users, UserCheck, CreditCard, DollarSign, CalendarClock, Percent, AlertCircle, RefreshCw, Ticket, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getFeverMetrics, getFeverSyncState, triggerFeverSync } from '@/lib/fever-client';
-import type { DashboardData, FeverMetrics, FeverSyncState } from '@/lib/types';
+import type { DashboardData, FeverMetrics, FeverSyncState, StripeMetrics } from '@/lib/types';
 
 export default function DashboardPage() {
   const [edgeosData, setEdgeosData] = useState<DashboardData | null>(null);
   const [feverMetrics, setFeverMetrics] = useState<FeverMetrics | null>(null);
   const [feverSync, setFeverSync] = useState<FeverSyncState | null>(null);
+  const [stripeData, setStripeData] = useState<StripeMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -47,8 +48,18 @@ export default function DashboardPage() {
         console.error('Failed to fetch Fever data:', error);
       }
     }
+    async function fetchStripe() {
+      try {
+        const res = await fetch('/api/stripe');
+        if (!res.ok) throw new Error(`Stripe API ${res.status}`);
+        setStripeData(await res.json());
+      } catch (error) {
+        console.error('Failed to fetch Stripe data:', error);
+      }
+    }
     fetchEdgeOS();
     fetchFever();
+    fetchStripe();
   }, []);
 
   const handleRefresh = async () => {
@@ -66,9 +77,15 @@ export default function DashboardPage() {
     const feverP = Promise.all([getFeverMetrics(), getFeverSyncState()])
       .then(([feverM, feverS]) => { setFeverMetrics(feverM); setFeverSync(feverS); })
       .catch(err => console.error('Failed to refresh Fever data:', err));
+    const stripeP = fetch('/api/stripe')
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Stripe API ${res.status}`);
+        setStripeData(await res.json());
+      })
+      .catch(err => console.error('Failed to refresh Stripe data:', err));
     await edgeosP;
     setRefreshing(false);
-    await feverP;
+    await Promise.all([feverP, stripeP]);
   };
 
   const handleFeverSync = async () => {
@@ -103,7 +120,15 @@ export default function DashboardPage() {
   const metrics = edgeosData?.metrics;
   const applications = edgeosData?.applications || [];
 
-  const combinedRevenue = (metrics?.revenue.approvedRevenue || 0) + (feverMetrics?.totalRevenue || 0);
+  const combinedRevenue =
+    (metrics?.revenue.approvedRevenue || 0) +
+    (feverMetrics?.totalRevenue || 0) +
+    (stripeData?.combinedNet || 0);
+
+  const formatShort = (amount: number) => {
+    if (amount >= 1000) return `$${Math.round(amount / 1000)}k`;
+    return `$${Math.round(amount)}`;
+  };
 
   if (loading) {
     return (
@@ -168,9 +193,19 @@ export default function DashboardPage() {
             icon={<Ticket className="h-5 w-5" />}
           />
           <MetricCard
+            title="Stripe Payments"
+            value={formatCurrency(stripeData?.combinedNet || 0)}
+            subtitle={
+              stripeData
+                ? `excl. EdgeOS • Portal ${formatShort(stripeData.accounts.portal.netTotal)} • Iceland ${formatShort(stripeData.accounts.iceland.netTotal)}`
+                : 'Excluding EdgeOS-recorded payments'
+            }
+            icon={<CreditCard className="h-5 w-5" />}
+          />
+          <MetricCard
             title="Combined Revenue"
             value={formatCurrency(combinedRevenue)}
-            subtitle="EdgeOS + Fever"
+            subtitle="EdgeOS + Fever + Stripe"
             icon={<DollarSign className="h-5 w-5" />}
             className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200"
           />
@@ -421,6 +456,7 @@ export default function DashboardPage() {
             <p className="text-sm text-blue-700 mt-1">
               <strong>EdgeOS Revenue</strong> = Committed amount from approved payments (includes installment plans where collection is in progress).
               <strong> Fever Revenue</strong> = Ticket sales from Fever platform (synced every 5 min).
+              <strong> Stripe Payments</strong> = Succeeded Stripe charges from The Portal + Iceland Eclipse accounts, with same-day amount matches against EdgeOS-recorded payments excluded to avoid double-counting (synced every 15 min).
             </p>
           </div>
         </div>

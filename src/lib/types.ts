@@ -366,6 +366,25 @@ export interface FeverSyncState {
   itemCount: number;
 }
 
+export interface StripeAccountSummary {
+  label: string;
+  netTotal: number;
+  netCount: number;
+  grossTotal: number;
+  grossCount: number;
+  edgeosMatchedTotal: number;
+  edgeosMatchedCount: number;
+}
+
+export interface StripeMetrics {
+  accounts: {
+    portal: StripeAccountSummary;
+    iceland: StripeAccountSummary;
+  };
+  combinedNet: number;
+  generatedAt: string;
+}
+
 export interface FeverOrderItem {
   fever_order_id: string;
   fever_item_id: string;

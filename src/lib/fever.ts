@@ -105,7 +105,7 @@ export interface FeverSyncResult {
 }
 
 interface FeverApiOrder {
-  id: string;
+  id: string | number;
   parent_order_id?: string;
   created_date_utc?: string;
   updated_date_utc?: string;
@@ -148,7 +148,7 @@ interface FeverApiOrder {
 }
 
 interface FeverApiItem {
-  id?: string;
+  id?: string | number;
   status?: string;
   created_date_utc?: string;
   modified_date_utc?: string;
@@ -229,7 +229,7 @@ function parseString(value: string | undefined | null): string | null {
 
 function transformOrder(apiOrder: FeverApiOrder): FeverOrder {
   return {
-    feverOrderId: apiOrder.id,
+    feverOrderId: String(apiOrder.id),
     parentOrderId: parseString(apiOrder.parent_order_id),
     orderCreatedAt: parseDate(apiOrder.created_date_utc),
     orderUpdatedAt: parseDate(apiOrder.updated_date_utc),
@@ -272,7 +272,7 @@ function transformOrder(apiOrder: FeverApiOrder): FeverOrder {
 function transformItem(apiItem: FeverApiItem, orderId: string): FeverOrderItem {
   return {
     feverOrderId: orderId,
-    feverItemId: apiItem.id || '',
+    feverItemId: apiItem.id != null ? String(apiItem.id) : '',
     status: parseString(apiItem.status),
     createdAt: parseDate(apiItem.created_date_utc),
     modifiedAt: parseDate(apiItem.modified_date_utc),
@@ -457,7 +457,7 @@ export async function fetchFeverOrders(options?: {
 
     const orderItems = apiOrder.order_items || [];
     for (const apiItem of orderItems) {
-      items.push(transformItem(apiItem, apiOrder.id));
+      items.push(transformItem(apiItem, String(apiOrder.id)));
     }
   }
 

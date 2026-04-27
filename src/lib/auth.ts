@@ -9,6 +9,7 @@ const VOLUNTEER_VIEWER_EMAILS = [
   'zilla@shifthappensvolunteers.com',
   'tule@simplefi.tech',
   'francisco@muvinai.com',
+  'matias@muvinai.com',
   'shapiro.jon@gmail.com',
 ];
 

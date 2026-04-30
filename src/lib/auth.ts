@@ -10,6 +10,7 @@ const VOLUNTEER_VIEWER_EMAILS = [
   'tule@simplefi.tech',
   'francisco@muvinai.com',
   'matias@muvinai.com',
+  'deja@im-xp.com',
   'shapiro.jon@gmail.com',
 ];
 

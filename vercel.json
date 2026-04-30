@@ -9,10 +9,6 @@
       "schedule": "3,8,13,18,23,28,33,38,43,48,53,58 * * * *"
     },
     {
-      "path": "/api/cron/fever-sync",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/stripe-sync",
       "schedule": "*/15 * * * *"
     }

@@ -147,7 +147,24 @@ async function runSync(isManual = false, skipSlack = false): Promise<NextRespons
       for (const order of newOrders) {
         const orderItems = items.filter((i) => i.feverOrderId === order.feverOrderId);
         try {
-          identifyBuyer(order, orderItems);
+          // Determine whether THIS order is the buyer's first-observed non-null
+          // utm_referring_domain. If yes, identifyBuyer writes initial_referrer
+          // / initial_referring_domain. If no, those traits are skipped so the
+          // existing first-touch value isn't overwritten. Per Jameson, May 4.
+          let firstTouchReferringDomain: string | null = null;
+          if (order.buyerEmail && order.utmReferringDomain) {
+            const { data: earliest } = await supabase
+              .from('fever_orders')
+              .select('fever_order_id, utm_referring_domain')
+              .eq('buyer_email', order.buyerEmail)
+              .not('utm_referring_domain', 'is', null)
+              .order('order_created_at', { ascending: true })
+              .limit(1);
+            if (earliest?.[0]?.fever_order_id === order.feverOrderId) {
+              firstTouchReferringDomain = order.utmReferringDomain;
+            }
+          }
+          identifyBuyer(order, orderItems, firstTouchReferringDomain);
           trackOrderCompleted(order, orderItems);
         } catch (err) {
           console.error(`[Segment] Failed for order ${order.feverOrderId}:`, err);

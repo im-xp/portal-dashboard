@@ -1,0 +1,5 @@
+{
+  "name": "n1-lovaliantpoine",
+  "description": "Phase 1 N=1 cohort: heavy-dupe user. Per cleanup-amplitude-fever-dupes.ts annotations, this user (amplitude_id 1546717639017) has 274 duplicate Order Completed events for one real Fever order (fever_order_id 110679138, 2 active items). Post-cleanup expectation: 1 Order Completed + 2 Product Purchased.",
+  "emails": ["lovaliantpoine@gmail.com"]
+}

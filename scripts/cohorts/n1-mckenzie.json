@@ -1,0 +1,5 @@
+{
+  "name": "n1-mckenzie",
+  "description": "Phase 1 N=1 cohort: Mckenzie Moon. Slack analysis showed 858 CIO Order Completed events for 6 distinct fever_order_ids; Supabase carries 1 active fever_order (106273258, 1 active item). Post-cleanup expectation in Amplitude: 1 Order Completed + 1 Product Purchased.",
+  "emails": ["x4vjnfmwy4@privaterelay.appleid.com"]
+}

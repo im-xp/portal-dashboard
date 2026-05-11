@@ -4,6 +4,7 @@ import { getPayments, getApplicationPopupMap } from '@/lib/nocodb';
 import type { StripeAccountKey } from '@/lib/stripe';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 interface StripeChargeRow {
   id: string;

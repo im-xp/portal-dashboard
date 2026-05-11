@@ -52,6 +52,6 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    '/((?!api/auth|api/email/sync|api/email/thread|api/cron|auth|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api/auth|api/email/sync|api/email/thread|api/cron|api/finances/aggregate|auth|_next/static|_next/image|favicon.ico).*)',
   ],
 };

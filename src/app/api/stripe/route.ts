@@ -79,12 +79,19 @@ async function fetchAllStripeCharges(): Promise<StripeChargeRow[]> {
 
 export async function GET() {
   try {
-    const [charges, payments, popupByAppId] = await Promise.all([
+    // Stripe charges are the source of truth for this endpoint. NocoDB calls
+    // are only used to dedup Portal charges against EdgeOS-recorded payments,
+    // so a transient NocoDB failure should degrade dedup, not 500 the route.
+    const [charges, nocodbResult] = await Promise.all([
       fetchAllStripeCharges(),
-      getPayments(),
-      getApplicationPopupMap(),
+      Promise.all([getPayments(), getApplicationPopupMap()]).catch((err) => {
+        console.error('[API] Stripe: NocoDB dedup unavailable, falling back to no-dedup:', err);
+        return null;
+      }),
     ]);
 
+    const payments = nocodbResult?.[0] ?? [];
+    const popupByAppId = nocodbResult?.[1] ?? new Map<number, number>();
     const approvedPayments = payments.filter((p) => p.status === 'approved');
 
     // Per-popup (amount, date) index. Each Stripe account only dedups against

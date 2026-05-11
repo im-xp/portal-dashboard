@@ -9,6 +9,7 @@ import type {
   AttendeeWithProducts,
   AttendeeProductWithStatus,
   AttendeeInstallmentInfo,
+  AttendeePaymentSummary,
   ApplicationWithDetails,
   Payment,
   PaymentProduct,
@@ -133,6 +134,7 @@ export async function clearCache(): Promise<void> {
     if (!redis) return;
     await redis.del([
       'dashboard-data', 'dashboard-data:stale',
+      'dashboard-data:v2', 'dashboard-data:v2:stale',
       'popup-cities', 'popup-cities:stale',
       'volunteer-data', 'volunteer-data:stale',
       'volunteer-segments', 'volunteer-segments:stale',
@@ -339,13 +341,16 @@ export async function getPopupCities(): Promise<PopupCity[]> {
 
 // Dashboard data fetcher with stale-while-revalidate
 
-export async function getDashboardData(): Promise<DashboardData> {
-  const cacheKey = 'dashboard-data';
+// Bumped from 'dashboard-data' to 'dashboard-data:v2' when AttendeeWithProducts
+// gained payments/amountPaid/listTotal/hasDiscount/isComped fields. Old prod
+// cron may still write to v1 until deployed; we ignore it.
+const DASHBOARD_CACHE_KEY = 'dashboard-data:v2';
 
-  const cached = await getCached<DashboardData>(cacheKey);
+export async function getDashboardData(): Promise<DashboardData> {
+  const cached = await getCached<DashboardData>(DASHBOARD_CACHE_KEY);
   if (cached) return cached;
 
-  const stale = await getStaleCached<DashboardData>(cacheKey);
+  const stale = await getStaleCached<DashboardData>(DASHBOARD_CACHE_KEY);
   if (stale) {
     triggerBackgroundRefresh();
     return stale;
@@ -370,7 +375,7 @@ async function triggerBackgroundRefresh(): Promise<void> {
 
 export async function refreshDashboardCache(): Promise<DashboardData> {
   const data = await fetchFreshDashboardData();
-  await setCache('dashboard-data', data);
+  await setCache(DASHBOARD_CACHE_KEY, data);
   return data;
 }
 
@@ -439,9 +444,12 @@ async function fetchFreshDashboardData(): Promise<DashboardData> {
   const soldByAttendee = new Map<number, AttendeeProductWithStatus[]>();
   const inCartByAttendee = new Map<number, AttendeeProductWithStatus[]>();
   const installmentByAttendee = new Map<number, AttendeeInstallmentInfo>();
+  const paymentsByAttendee = new Map<number, AttendeePaymentSummary[]>();
 
   for (const payment of paymentsWithProducts) {
     if (payment.status !== 'approved') continue;
+
+    const listTotalByAttendeeForThisPayment = new Map<number, number>();
 
     for (const pp of payment.paymentProducts) {
       const existing = soldByAttendee.get(pp.attendee_id) || [];
@@ -455,6 +463,12 @@ async function fetchFreshDashboardData(): Promise<DashboardData> {
       });
       soldByAttendee.set(pp.attendee_id, existing);
 
+      const ppListTotal = (pp.product_price || 0) * (pp.quantity || 1);
+      listTotalByAttendeeForThisPayment.set(
+        pp.attendee_id,
+        (listTotalByAttendeeForThisPayment.get(pp.attendee_id) || 0) + ppListTotal,
+      );
+
       if (payment.is_installment_plan && !installmentByAttendee.has(pp.attendee_id)) {
         installmentByAttendee.set(pp.attendee_id, {
           paymentId: payment.id,
@@ -463,6 +477,27 @@ async function fetchFreshDashboardData(): Promise<DashboardData> {
           installmentsTotal: payment.installments_total,
         });
       }
+    }
+
+    // Attribute payment.amount to each attendee on this payment proportional to their list share.
+    const totalListAcrossAttendees = Array.from(listTotalByAttendeeForThisPayment.values())
+      .reduce((s, v) => s + v, 0);
+
+    for (const [attendeeId, attendeeListTotal] of listTotalByAttendeeForThisPayment) {
+      const share = totalListAcrossAttendees > 0
+        ? attendeeListTotal / totalListAcrossAttendees
+        : 1 / listTotalByAttendeeForThisPayment.size;
+      const summary: AttendeePaymentSummary = {
+        paymentId: payment.id,
+        amountPaid: payment.amount * share,
+        listTotal: attendeeListTotal,
+        couponCode: payment.coupon_code,
+        discountPercent: payment.discount_value || 0,
+        status: payment.status,
+      };
+      const arr = paymentsByAttendee.get(attendeeId) || [];
+      arr.push(summary);
+      paymentsByAttendee.set(attendeeId, arr);
     }
   }
 
@@ -496,6 +531,12 @@ async function fetchFreshDashboardData(): Promise<DashboardData> {
     const inCart = inCartByAttendee.get(attendee.id) || [];
     const { stage, hasPass, hasLodging } = calculateJourneyStage(sold, inCart);
 
+    const payments = paymentsByAttendee.get(attendee.id) || [];
+    const amountPaid = payments.reduce((s, p) => s + p.amountPaid, 0);
+    const listTotal = payments.reduce((s, p) => s + p.listTotal, 0);
+    const hasDiscount = payments.some(p => !!p.couponCode || p.discountPercent > 0);
+    const isComped = hasDiscount && amountPaid < 0.01;
+
     return {
       ...attendee,
       purchasedProducts: productsMap.get(attendee.id) || [],
@@ -505,6 +546,11 @@ async function fetchFreshDashboardData(): Promise<DashboardData> {
       hasPass,
       hasLodging,
       installmentPlan: installmentByAttendee.get(attendee.id) ?? null,
+      payments,
+      amountPaid,
+      listTotal,
+      hasDiscount,
+      isComped,
     };
   });
 

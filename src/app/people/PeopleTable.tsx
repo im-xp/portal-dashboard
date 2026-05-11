@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Package, X, CheckCircle2, ShoppingCart, AlertCircle, Clock, CalendarClock } from 'lucide-react';
+import { Search, Package, X, CheckCircle2, ShoppingCart, AlertCircle, Clock, CalendarClock, Ticket, Gift } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ApplicationWithDetails, AttendeeWithProducts, JourneyStage } from '@/lib/types';
 import { JourneyPipeline } from './JourneyPipeline';
@@ -61,6 +61,7 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [journeyFilter, setJourneyFilter] = useState<JourneyStage | 'all'>('all');
+  const [discountFilter, setDiscountFilter] = useState<'all' | 'discounted' | 'comped' | 'none'>('all');
   const [selectedPerson, setSelectedPerson] = useState<AttendeeWithProducts | null>(null);
 
   // Get application status for each attendee
@@ -89,9 +90,19 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
       const matchesJourney = journeyFilter === 'all' ||
         att.journeyStage === journeyFilter;
 
-      return matchesSearch && matchesStatus && matchesJourney;
+      // Discount filter
+      const hasDiscount = att.hasDiscount ?? false;
+      const isComped = att.isComped ?? false;
+      const amountPaid = att.amountPaid ?? 0;
+      const matchesDiscount =
+        discountFilter === 'all' ||
+        (discountFilter === 'discounted' && hasDiscount) ||
+        (discountFilter === 'comped' && isComped) ||
+        (discountFilter === 'none' && !hasDiscount && amountPaid > 0);
+
+      return matchesSearch && matchesStatus && matchesJourney && matchesDiscount;
     });
-  }, [attendeesWithStatus, search, statusFilter, journeyFilter]);
+  }, [attendeesWithStatus, search, statusFilter, journeyFilter, discountFilter]);
 
   return (
     <div className="flex flex-col">
@@ -128,6 +139,17 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
                 <SelectItem value="draft">Draft</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={discountFilter} onValueChange={(v) => setDiscountFilter(v as typeof discountFilter)}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="Discount" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Payments</SelectItem>
+                <SelectItem value="discounted">Used Discount Code</SelectItem>
+                <SelectItem value="comped">Comped (100% off)</SelectItem>
+                <SelectItem value="none">No Discount</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Count */}
@@ -146,6 +168,7 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
                     <TableHead>Journey</TableHead>
                     <TableHead>Pass</TableHead>
                     <TableHead>Lodging</TableHead>
+                    <TableHead className="hidden md:table-cell">Paid</TableHead>
                     <TableHead className="hidden md:table-cell">Check-in Code</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -193,6 +216,24 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
                             <span className="text-zinc-300">—</span>
                           )}
                         </TableCell>
+                        <TableCell className="hidden md:table-cell whitespace-nowrap">
+                          {person.soldProducts.length === 0 ? (
+                            <span className="text-zinc-300">—</span>
+                          ) : person.isComped ? (
+                            <Badge variant="outline" className="gap-1 bg-violet-50 text-violet-700 border-violet-300">
+                              <Gift className="h-3 w-3" /> Comped
+                            </Badge>
+                          ) : person.hasDiscount ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="font-medium">${Math.round(person.amountPaid ?? 0).toLocaleString()}</span>
+                              <Badge variant="outline" className="gap-1 bg-amber-50 text-amber-700 border-amber-300 text-[10px]">
+                                <Ticket className="h-3 w-3" /> code
+                              </Badge>
+                            </span>
+                          ) : (
+                            <span className="font-medium">${Math.round(person.amountPaid ?? 0).toLocaleString()}</span>
+                          )}
+                        </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <code className="text-xs bg-zinc-100 px-2 py-1 rounded">
                             {person.check_in_code || '—'}
@@ -203,7 +244,7 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
                   })}
                   {filteredAttendees.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-zinc-500">
+                      <TableCell colSpan={7} className="text-center py-8 text-zinc-500">
                         No people found matching your filters
                       </TableCell>
                     </TableRow>
@@ -330,6 +371,43 @@ export function PeopleTable({ applications, attendees, journeyCounts }: PeopleTa
                         </span>
                       </div>
                     ))}
+
+                    {/* Payment summary: list vs paid + discount codes */}
+                    <div className="mt-3 pt-3 border-t border-zinc-100 space-y-1.5 text-sm">
+                      <div className="flex items-center justify-between text-zinc-500">
+                        <span>List total</span>
+                        <span>${Math.round(selectedPerson.listTotal ?? 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-zinc-700">Actually paid</span>
+                        {selectedPerson.isComped ? (
+                          <Badge variant="outline" className="gap-1 bg-violet-50 text-violet-700 border-violet-300">
+                            <Gift className="h-3 w-3" /> Comped
+                          </Badge>
+                        ) : (
+                          <span className="font-semibold text-emerald-700">
+                            ${Math.round(selectedPerson.amountPaid ?? 0).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                      {(selectedPerson.payments ?? []).some(p => p.couponCode || p.discountPercent > 0) && (
+                        <div className="pt-1 space-y-1">
+                          {(selectedPerson.payments ?? [])
+                            .filter(p => p.couponCode || p.discountPercent > 0)
+                            .map(p => (
+                              <div key={`discount-${p.paymentId}`} className="flex items-center gap-2 text-xs">
+                                <Ticket className="h-3 w-3 text-amber-600" />
+                                <code className="bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded">
+                                  {p.couponCode || 'discount'}
+                                </code>
+                                {p.discountPercent > 0 && (
+                                  <span className="text-amber-700">{p.discountPercent}% off</span>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-sm text-zinc-400">None</p>

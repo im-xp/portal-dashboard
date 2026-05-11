@@ -167,6 +167,15 @@ export interface AttendeeInstallmentInfo {
   installmentsTotal: number | null;
 }
 
+export interface AttendeePaymentSummary {
+  paymentId: number;
+  amountPaid: number;            // payment.amount — what actually hit the card
+  listTotal: number;             // sum of paymentProducts list prices for this attendee
+  couponCode: string | null;
+  discountPercent: number;       // payment.discount_value
+  status: Payment['status'];
+}
+
 export interface AttendeeWithProducts extends Attendee {
   purchasedProducts: LinkedProduct[];
   soldProducts: AttendeeProductWithStatus[];
@@ -175,6 +184,11 @@ export interface AttendeeWithProducts extends Attendee {
   hasPass: boolean;
   hasLodging: boolean;
   installmentPlan: AttendeeInstallmentInfo | null;
+  payments: AttendeePaymentSummary[];
+  amountPaid: number;            // sum across approved payments attributed to this attendee
+  listTotal: number;             // sum of list prices across approved payments
+  hasDiscount: boolean;          // any approved payment used a coupon code
+  isComped: boolean;             // hasDiscount && amountPaid === 0
 }
 
 export interface ApplicationWithDetails extends Application {

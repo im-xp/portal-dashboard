@@ -4,12 +4,22 @@ System-wide sync health monitoring routes to Slack `#pat-health`.
 
 ## Architecture
 
-Two independent observers, either alerting = look at it:
+Single external observer: a GitHub Actions watchdog (`.github/workflows/sync-freshness.yml`) running hourly. Queries Supabase `*_sync_state` rows directly and posts to `#pat-health` when freshness thresholds are exceeded.
 
-1. **Vercel cron observability** — catches cron errors, timeouts, 5xx. Configured in Vercel dashboard → project → Settings → Integrations → Slack, routed to `#pat-health`.
-2. **GitHub Actions watchdog** (`.github/workflows/sync-freshness.yml`) — hourly external check that survives Vercel cron removal. Queries Supabase `*_sync_state.last_sync_at` directly.
+This is sufficient on its own because the watchdog catches every cron failure mode — including the one Vercel's own observability can't.
 
-The GHA layer exists specifically because Vercel's observability only tracks crons that *exist* in `vercel.json` — if a cron is removed entirely (as fever-sync was during the CIO cleanup, then forgotten for 5 days), Vercel has nothing to alert on. The GHA watchdog catches that case.
+| Failure mode | GHA watchdog catches |
+|---|---|
+| Cron removed from `vercel.json` | yes — table goes stale, alert fires |
+| Cron erroring every run | yes — `last_sync_at` doesn't advance |
+| Cron timing out | yes — same as above |
+| Cron healthy but API empty | N/A — route still updates `last_sync_at` on successful empty runs, which is correct |
+
+### Why not Vercel → Slack alerts
+
+Considered and rejected. Vercel's native cron-failure alerting requires the paid **Observability Plus** add-on. The free Slack integration in the Marketplace covers deployment status, comments, and new projects — not cron failures. Adding it would post deployment noise to `#pat-health` without contributing to cron coverage.
+
+If real-time native alerts ever become worth the price (vs. hourly GHA polling), upgrade to Observability Plus and configure project alerts at `/observability/alerts`.
 
 ## Thresholds
 

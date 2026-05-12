@@ -1,0 +1,100 @@
+name: sync-freshness watchdog
+
+on:
+  schedule:
+    - cron: '15 * * * *'
+  workflow_dispatch:
+    inputs:
+      force_alert:
+        description: 'Force an alert by setting all thresholds to 0 (test mode)'
+        required: false
+        default: 'false'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Install psql
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      - name: Query sync state ages
+        id: query
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          FEVER=$(psql "$SUPABASE_DB_URL" -tAF '|' -c "SELECT EXTRACT(EPOCH FROM (now() - last_sync_at))::int, last_sync_at::text FROM fever_sync_state WHERE id=1;")
+          STRIPE=$(psql "$SUPABASE_DB_URL" -tAF '|' -c "SELECT EXTRACT(EPOCH FROM (now() - last_sync_at))::int, last_sync_at::text FROM stripe_sync_state WHERE id=1;")
+          echo "fever_age=${FEVER%%|*}" >> "$GITHUB_OUTPUT"
+          echo "fever_ts=${FEVER##*|}" >> "$GITHUB_OUTPUT"
+          echo "stripe_age=${STRIPE%%|*}" >> "$GITHUB_OUTPUT"
+          echo "stripe_ts=${STRIPE##*|}" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate thresholds
+        id: eval
+        env:
+          FEVER_AGE: ${{ steps.query.outputs.fever_age }}
+          FEVER_TS: ${{ steps.query.outputs.fever_ts }}
+          STRIPE_AGE: ${{ steps.query.outputs.stripe_age }}
+          STRIPE_TS: ${{ steps.query.outputs.stripe_ts }}
+          FORCE: ${{ github.event.inputs.force_alert }}
+        run: |
+          set -euo pipefail
+          FEVER_THRESHOLD=1800   # 30 min (cron is */5)
+          STRIPE_THRESHOLD=3600  # 60 min (cron is */15)
+          if [ "$FORCE" = "true" ]; then
+            FEVER_THRESHOLD=0
+            STRIPE_THRESHOLD=0
+          fi
+          STALE_LINES=""
+          OK_LINES=""
+          fmt_age() {
+            local s=$1
+            if [ "$s" -lt 3600 ]; then echo "$((s/60))m"
+            elif [ "$s" -lt 86400 ]; then echo "$((s/3600))h $((s%3600/60))m"
+            else echo "$((s/86400))d $((s%86400/3600))h"
+            fi
+          }
+          if [ "$FEVER_AGE" -gt "$FEVER_THRESHOLD" ]; then
+            STALE_LINES="${STALE_LINES}• fever_sync_state: $(fmt_age $FEVER_AGE) stale (last: ${FEVER_TS} UTC)\n"
+          else
+            OK_LINES="${OK_LINES}• fever_sync_state: ok ($(fmt_age $FEVER_AGE) ago)\n"
+          fi
+          if [ "$STRIPE_AGE" -gt "$STRIPE_THRESHOLD" ]; then
+            STALE_LINES="${STALE_LINES}• stripe_sync_state: $(fmt_age $STRIPE_AGE) stale (last: ${STRIPE_TS} UTC)\n"
+          else
+            OK_LINES="${OK_LINES}• stripe_sync_state: ok ($(fmt_age $STRIPE_AGE) ago)\n"
+          fi
+          {
+            echo "stale_lines<<EOF"
+            printf '%b' "$STALE_LINES"
+            echo "EOF"
+            echo "ok_lines<<EOF"
+            printf '%b' "$OK_LINES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$STALE_LINES" ]; then
+            echo "has_stale=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post to Slack
+        if: steps.eval.outputs.has_stale == 'true'
+        env:
+          WEBHOOK: ${{ secrets.SLACK_WEBHOOK_PAT_HEALTH }}
+          STALE: ${{ steps.eval.outputs.stale_lines }}
+          OK: ${{ steps.eval.outputs.ok_lines }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TEXT=":red_circle: *Sync freshness alert*\n${STALE}${OK}\n<${RUN_URL}|Workflow run>"
+          PAYLOAD=$(jq -n --arg text "$TEXT" '{text: $text}')
+          curl -fsS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$WEBHOOK" > /dev/null
+
+      - name: Summary
+        run: |
+          echo "## Sync freshness report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          printf '%b' "${{ steps.eval.outputs.ok_lines }}${{ steps.eval.outputs.stale_lines }}" >> "$GITHUB_STEP_SUMMARY"

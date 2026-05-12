@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           FEVER=$(psql "$SUPABASE_DB_URL" -tAF '|' -c "SELECT EXTRACT(EPOCH FROM (now() - last_sync_at))::int, last_sync_at::text FROM fever_sync_state WHERE id=1;")
-          STRIPE=$(psql "$SUPABASE_DB_URL" -tAF '|' -c "SELECT EXTRACT(EPOCH FROM (now() - last_sync_at))::int, last_sync_at::text FROM stripe_sync_state WHERE id=1;")
+          STRIPE=$(psql "$SUPABASE_DB_URL" -tAF '|' -c "SELECT EXTRACT(EPOCH FROM (now() - MIN(last_synced_at)))::int, MIN(last_synced_at)::text FROM stripe_sync_state;")
           echo "fever_age=${FEVER%%|*}" >> "$GITHUB_OUTPUT"
           echo "fever_ts=${FEVER##*|}" >> "$GITHUB_OUTPUT"
           echo "stripe_age=${STRIPE%%|*}" >> "$GITHUB_OUTPUT"

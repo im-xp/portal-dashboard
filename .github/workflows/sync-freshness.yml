@@ -24,8 +24,8 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -euo pipefail
-          FEVER=$(psql "$SUPABASE_DB_URL" -tAF '|' -c "SELECT EXTRACT(EPOCH FROM (now() - last_sync_at))::int, last_sync_at::text FROM fever_sync_state WHERE id=1;")
-          STRIPE=$(psql "$SUPABASE_DB_URL" -tAF '|' -c "SELECT EXTRACT(EPOCH FROM (now() - MIN(last_synced_at)))::int, MIN(last_synced_at)::text FROM stripe_sync_state;")
+          FEVER=$(psql "$SUPABASE_DB_URL" -tAF '|' -c "SELECT EXTRACT(EPOCH FROM (now() - last_sync_at))::int, to_char(last_sync_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') FROM fever_sync_state WHERE id=1;")
+          STRIPE=$(psql "$SUPABASE_DB_URL" -tAF '|' -c "SELECT EXTRACT(EPOCH FROM (now() - MIN(last_synced_at)))::int, to_char(MIN(last_synced_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') FROM stripe_sync_state;")
           echo "fever_age=${FEVER%%|*}" >> "$GITHUB_OUTPUT"
           echo "fever_ts=${FEVER##*|}" >> "$GITHUB_OUTPUT"
           echo "stripe_age=${STRIPE%%|*}" >> "$GITHUB_OUTPUT"
@@ -56,23 +56,24 @@ jobs:
             else echo "$((s/86400))d $((s%86400/3600))h"
             fi
           }
+          NL=$'\n'
           if [ "$FEVER_AGE" -gt "$FEVER_THRESHOLD" ]; then
-            STALE_LINES="${STALE_LINES}• fever_sync_state: $(fmt_age $FEVER_AGE) stale (last: ${FEVER_TS} UTC)\n"
+            STALE_LINES="${STALE_LINES}• \`fever_sync_state\` — $(fmt_age $FEVER_AGE) stale (last sync: ${FEVER_TS} UTC)${NL}"
           else
-            OK_LINES="${OK_LINES}• fever_sync_state: ok ($(fmt_age $FEVER_AGE) ago)\n"
+            OK_LINES="${OK_LINES}• \`fever_sync_state\` — ok, $(fmt_age $FEVER_AGE) ago${NL}"
           fi
           if [ "$STRIPE_AGE" -gt "$STRIPE_THRESHOLD" ]; then
-            STALE_LINES="${STALE_LINES}• stripe_sync_state: $(fmt_age $STRIPE_AGE) stale (last: ${STRIPE_TS} UTC)\n"
+            STALE_LINES="${STALE_LINES}• \`stripe_sync_state\` — $(fmt_age $STRIPE_AGE) stale (last sync: ${STRIPE_TS} UTC)${NL}"
           else
-            OK_LINES="${OK_LINES}• stripe_sync_state: ok ($(fmt_age $STRIPE_AGE) ago)\n"
+            OK_LINES="${OK_LINES}• \`stripe_sync_state\` — ok, $(fmt_age $STRIPE_AGE) ago${NL}"
           fi
           {
-            echo "stale_lines<<EOF"
-            printf '%b' "$STALE_LINES"
-            echo "EOF"
-            echo "ok_lines<<EOF"
-            printf '%b' "$OK_LINES"
-            echo "EOF"
+            echo "stale_lines<<SYNC_EOF"
+            printf '%s' "$STALE_LINES"
+            echo "SYNC_EOF"
+            echo "ok_lines<<SYNC_EOF"
+            printf '%s' "$OK_LINES"
+            echo "SYNC_EOF"
           } >> "$GITHUB_OUTPUT"
           if [ -n "$STALE_LINES" ]; then
             echo "has_stale=true" >> "$GITHUB_OUTPUT"
@@ -89,7 +90,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          TEXT=":red_circle: *Sync freshness alert*\n${STALE}${OK}\n<${RUN_URL}|Workflow run>"
+          TEXT=$(printf ':red_circle: *Sync freshness alert*\n\n%s%s\n<%s|Workflow run>' "$STALE" "$OK" "$RUN_URL")
           PAYLOAD=$(jq -n --arg text "$TEXT" '{text: $text}')
           curl -fsS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$WEBHOOK" > /dev/null
 

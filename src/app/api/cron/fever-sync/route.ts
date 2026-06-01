@@ -19,7 +19,11 @@ interface SyncStats {
   errors: string[];
 }
 
-async function runSync(isManual = false, skipSlack = false): Promise<NextResponse> {
+async function runSync(
+  isManual = false,
+  skipSlack = false,
+  skipSegment = false,
+): Promise<NextResponse> {
   const stats: SyncStats = {
     ordersProcessed: 0,
     ordersInserted: 0,
@@ -143,7 +147,7 @@ async function runSync(isManual = false, skipSlack = false): Promise<NextRespons
       }
     }
 
-    if (process.env.SEGMENT_WRITE_KEY) {
+    if (!skipSegment && process.env.SEGMENT_WRITE_KEY) {
       for (const order of newOrders) {
         const orderItems = items.filter((i) => i.feverOrderId === order.feverOrderId);
         try {
@@ -256,7 +260,8 @@ export async function GET(request: Request) {
   }
 
   const skipSlack = searchParams.get('skipSlack') === 'true';
-  return runSync(false, skipSlack);
+  const skipSegment = searchParams.get('skipSegment') === 'true';
+  return runSync(false, skipSlack, skipSegment);
 }
 
 export async function POST(request: Request) {
@@ -268,6 +273,7 @@ export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const isManual = searchParams.get('manual') === 'true';
   const skipSlack = searchParams.get('skipSlack') === 'true';
+  const skipSegment = searchParams.get('skipSegment') === 'true';
 
-  return runSync(isManual, skipSlack);
+  return runSync(isManual, skipSlack, skipSegment);
 }

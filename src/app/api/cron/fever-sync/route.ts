@@ -23,6 +23,8 @@ async function runSync(
   isManual = false,
   skipSlack = false,
   skipSegment = false,
+  manualDateFrom?: string,
+  manualDateTo?: string,
 ): Promise<NextResponse> {
   const stats: SyncStats = {
     ordersProcessed: 0,
@@ -52,8 +54,19 @@ async function runSync(
       console.error('[Fever Sync] Failed to read sync state:', syncStateError);
     }
 
-    const dateFrom = isManual ? undefined : syncState?.last_order_created_at?.split('T')[0];
-    const dateTo = dateFrom ? new Date().toISOString().split('T')[0] : undefined;
+    // For manual mode, prefer caller-supplied date_from / date_to (targeted
+    // backfill window) over the watermark. Bare ?manual=true (no dates) still
+    // means "full re-pull" — both dateFrom and dateTo stay undefined and
+    // fetchFeverOrders pulls all history.
+    let dateFrom: string | undefined;
+    let dateTo: string | undefined;
+    if (isManual) {
+      dateFrom = manualDateFrom;
+      dateTo = manualDateTo;
+    } else {
+      dateFrom = syncState?.last_order_created_at?.split('T')[0];
+      dateTo = dateFrom ? new Date().toISOString().split('T')[0] : undefined;
+    }
 
     console.log(`[Fever Sync] Starting ${isManual ? 'manual' : 'incremental'} sync${dateFrom ? ` from ${dateFrom} to ${dateTo}` : ''}`);
 
@@ -275,5 +288,23 @@ export async function POST(request: Request) {
   const skipSlack = searchParams.get('skipSlack') === 'true';
   const skipSegment = searchParams.get('skipSegment') === 'true';
 
-  return runSync(isManual, skipSlack, skipSegment);
+  let manualDateFrom: string | undefined;
+  let manualDateTo: string | undefined;
+  if (isManual) {
+    const dateFromParam = searchParams.get('date_from');
+    const dateToParam = searchParams.get('date_to');
+    if ((dateFromParam && !dateToParam) || (!dateFromParam && dateToParam)) {
+      return NextResponse.json(
+        {
+          error:
+            'date_from and date_to must both be provided together (YYYY-MM-DD). Omit both for a full re-pull.',
+        },
+        { status: 400 },
+      );
+    }
+    manualDateFrom = dateFromParam || undefined;
+    manualDateTo = dateToParam || undefined;
+  }
+
+  return runSync(isManual, skipSlack, skipSegment, manualDateFrom, manualDateTo);
 }

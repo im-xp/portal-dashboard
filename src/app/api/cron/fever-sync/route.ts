@@ -88,7 +88,13 @@ async function runSync(
       dateTo = manualDateTo;
     } else {
       dateFrom = syncState?.last_order_created_at?.split('T')[0];
-      dateTo = dateFrom ? new Date().toISOString().split('T')[0] : undefined;
+      // Fever interprets date_to as an exclusive upper bound (created_date < date_to).
+      // Using today's date here silently excluded ALL of today's orders every tick
+      // until the day rolled over. Use tomorrow so the current UTC day is included.
+      // Empirically verified 2026-06-01: date_to=2026-06-01 returned 0 orders dated
+      // 2026-06-01; date_to=2026-06-02 returned all of them.
+      const tomorrowUtc = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      dateTo = dateFrom ? tomorrowUtc : undefined;
     }
 
     console.log(`[Fever Sync] Starting ${isManual ? 'manual' : 'incremental'} sync${dateFrom ? ` from ${dateFrom} to ${dateTo}` : ''}`);

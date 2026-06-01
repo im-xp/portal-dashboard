@@ -89,6 +89,10 @@ async function runSync(
     }
 
     const newOrders: FeverOrder[] = [];
+    // Tracks order IDs whose upsert batch succeeded. Used to compute the
+    // watermark only over orders that actually made it into Supabase — see
+    // the watermark computation below for the rationale.
+    const successfullyUpsertedOrderIds = new Set<string>();
     const UPSERT_BATCH = 100;
 
     for (let i = 0; i < orders.length; i += UPSERT_BATCH) {
@@ -106,6 +110,7 @@ async function runSync(
 
       for (const order of batch) {
         stats.ordersProcessed++;
+        successfullyUpsertedOrderIds.add(order.feverOrderId);
         if (!existingOrderIds.has(order.feverOrderId)) {
           stats.ordersInserted++;
           newOrders.push(order);
@@ -203,12 +208,22 @@ async function runSync(
       await flushSegment();
     }
 
+    // Only advance the watermark over orders we actually wrote, and only
+    // when ALL batches succeeded. A failed batch leaves a permanent gap if
+    // the watermark advances past it (silent 5-27 data loss, 2026-05-27).
+    // On any error, hold the watermark so the next tick re-fetches the
+    // failed window. last_sync_at always advances so observers can
+    // distinguish "errored" from "didn't run."
+    const hasErrors = stats.errors.length > 0;
     let latestOrderCreated = syncState?.last_order_created_at;
-    for (const order of orders) {
-      if (order.orderCreatedAt) {
-        const orderTs = order.orderCreatedAt.toISOString();
-        if (!latestOrderCreated || orderTs > latestOrderCreated) {
-          latestOrderCreated = orderTs;
+    if (!hasErrors) {
+      for (const order of orders) {
+        if (!successfullyUpsertedOrderIds.has(order.feverOrderId)) continue;
+        if (order.orderCreatedAt) {
+          const orderTs = order.orderCreatedAt.toISOString();
+          if (!latestOrderCreated || orderTs > latestOrderCreated) {
+            latestOrderCreated = orderTs;
+          }
         }
       }
     }
@@ -229,6 +244,8 @@ async function runSync(
     return NextResponse.json({
       success: true,
       stats,
+      errors_count: stats.errors.length,
+      watermark_held: hasErrors,
       syncedAt: new Date().toISOString(),
     });
   } catch (error) {

@@ -19,7 +19,13 @@ interface SyncStats {
   errors: string[];
 }
 
-async function runSync(isManual = false, skipSlack = false): Promise<NextResponse> {
+async function runSync(
+  isManual = false,
+  skipSlack = false,
+  skipSegment = false,
+  manualDateFrom?: string,
+  manualDateTo?: string,
+): Promise<NextResponse> {
   const stats: SyncStats = {
     ordersProcessed: 0,
     ordersInserted: 0,
@@ -30,12 +36,35 @@ async function runSync(isManual = false, skipSlack = false): Promise<NextRespons
     errors: [],
   };
 
+  // Per-run log row id (fever_sync_runs). Populated after the env check so
+  // we don't write a row for misconfigured runs. Best-effort: a failure to
+  // insert is logged but does NOT block the sync.
+  let runLogId: number | null = null;
+  const runKind: 'incremental' | 'manual' = isManual ? 'manual' : 'incremental';
+
   try {
     if (!process.env.FEVER_USERNAME || !process.env.FEVER_PASSWORD) {
       return NextResponse.json(
         { error: 'Fever credentials not configured', configured: false },
         { status: 503 }
       );
+    }
+
+    {
+      const { data: runRow, error: runInsertError } = await supabase
+        .from('fever_sync_runs')
+        .insert({
+          started_at: new Date().toISOString(),
+          kind: runKind,
+          skipped_segment: skipSegment,
+        })
+        .select('id')
+        .single();
+      if (runInsertError) {
+        console.error('[Fever Sync] Failed to insert run-log row:', runInsertError);
+      } else {
+        runLogId = runRow?.id ?? null;
+      }
     }
 
     const { data: syncState, error: syncStateError } = await supabase
@@ -48,8 +77,25 @@ async function runSync(isManual = false, skipSlack = false): Promise<NextRespons
       console.error('[Fever Sync] Failed to read sync state:', syncStateError);
     }
 
-    const dateFrom = isManual ? undefined : syncState?.last_order_created_at?.split('T')[0];
-    const dateTo = dateFrom ? new Date().toISOString().split('T')[0] : undefined;
+    // For manual mode, prefer caller-supplied date_from / date_to (targeted
+    // backfill window) over the watermark. Bare ?manual=true (no dates) still
+    // means "full re-pull" — both dateFrom and dateTo stay undefined and
+    // fetchFeverOrders pulls all history.
+    let dateFrom: string | undefined;
+    let dateTo: string | undefined;
+    if (isManual) {
+      dateFrom = manualDateFrom;
+      dateTo = manualDateTo;
+    } else {
+      dateFrom = syncState?.last_order_created_at?.split('T')[0];
+      // Fever interprets date_to as an exclusive upper bound (created_date < date_to).
+      // Using today's date here silently excluded ALL of today's orders every tick
+      // until the day rolled over. Use tomorrow so the current UTC day is included.
+      // Empirically verified 2026-06-01: date_to=2026-06-01 returned 0 orders dated
+      // 2026-06-01; date_to=2026-06-02 returned all of them.
+      const tomorrowUtc = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      dateTo = dateFrom ? tomorrowUtc : undefined;
+    }
 
     console.log(`[Fever Sync] Starting ${isManual ? 'manual' : 'incremental'} sync${dateFrom ? ` from ${dateFrom} to ${dateTo}` : ''}`);
 
@@ -72,6 +118,10 @@ async function runSync(isManual = false, skipSlack = false): Promise<NextRespons
     }
 
     const newOrders: FeverOrder[] = [];
+    // Tracks order IDs whose upsert batch succeeded. Used to compute the
+    // watermark only over orders that actually made it into Supabase — see
+    // the watermark computation below for the rationale.
+    const successfullyUpsertedOrderIds = new Set<string>();
     const UPSERT_BATCH = 100;
 
     for (let i = 0; i < orders.length; i += UPSERT_BATCH) {
@@ -89,6 +139,7 @@ async function runSync(isManual = false, skipSlack = false): Promise<NextRespons
 
       for (const order of batch) {
         stats.ordersProcessed++;
+        successfullyUpsertedOrderIds.add(order.feverOrderId);
         if (!existingOrderIds.has(order.feverOrderId)) {
           stats.ordersInserted++;
           newOrders.push(order);
@@ -143,7 +194,7 @@ async function runSync(isManual = false, skipSlack = false): Promise<NextRespons
       }
     }
 
-    if (process.env.SEGMENT_WRITE_KEY) {
+    if (!skipSegment && process.env.SEGMENT_WRITE_KEY) {
       for (const order of newOrders) {
         const orderItems = items.filter((i) => i.feverOrderId === order.feverOrderId);
         try {
@@ -186,12 +237,22 @@ async function runSync(isManual = false, skipSlack = false): Promise<NextRespons
       await flushSegment();
     }
 
+    // Only advance the watermark over orders we actually wrote, and only
+    // when ALL batches succeeded. A failed batch leaves a permanent gap if
+    // the watermark advances past it (silent 5-27 data loss, 2026-05-27).
+    // On any error, hold the watermark so the next tick re-fetches the
+    // failed window. last_sync_at always advances so observers can
+    // distinguish "errored" from "didn't run."
+    const hasErrors = stats.errors.length > 0;
     let latestOrderCreated = syncState?.last_order_created_at;
-    for (const order of orders) {
-      if (order.orderCreatedAt) {
-        const orderTs = order.orderCreatedAt.toISOString();
-        if (!latestOrderCreated || orderTs > latestOrderCreated) {
-          latestOrderCreated = orderTs;
+    if (!hasErrors) {
+      for (const order of orders) {
+        if (!successfullyUpsertedOrderIds.has(order.feverOrderId)) continue;
+        if (order.orderCreatedAt) {
+          const orderTs = order.orderCreatedAt.toISOString();
+          if (!latestOrderCreated || orderTs > latestOrderCreated) {
+            latestOrderCreated = orderTs;
+          }
         }
       }
     }
@@ -207,15 +268,48 @@ async function runSync(isManual = false, skipSlack = false): Promise<NextRespons
       })
       .eq('id', 1);
 
+    if (runLogId !== null) {
+      const { error: runUpdateError } = await supabase
+        .from('fever_sync_runs')
+        .update({
+          finished_at: new Date().toISOString(),
+          orders_fetched: orders.length,
+          orders_inserted: stats.ordersInserted,
+          orders_updated: stats.ordersUpdated,
+          errors: stats.errors.map((message, index) => ({ index, message })),
+          watermark_advanced_to: hasErrors ? null : latestOrderCreated,
+        })
+        .eq('id', runLogId);
+      if (runUpdateError) {
+        console.error('[Fever Sync] Failed to update run-log row:', runUpdateError);
+      }
+    }
+
     console.log('[Fever Sync] Complete:', stats);
 
     return NextResponse.json({
       success: true,
       stats,
+      errors_count: stats.errors.length,
+      watermark_held: hasErrors,
+      runId: runLogId,
       syncedAt: new Date().toISOString(),
     });
   } catch (error) {
     console.error('[Fever Sync] Error:', error);
+    if (runLogId !== null) {
+      const { error: runUpdateError } = await supabase
+        .from('fever_sync_runs')
+        .update({
+          finished_at: new Date().toISOString(),
+          errors: [{ index: 0, message: `fatal: ${String(error)}` }],
+          watermark_advanced_to: null,
+        })
+        .eq('id', runLogId);
+      if (runUpdateError) {
+        console.error('[Fever Sync] Failed to update run-log row after fatal error:', runUpdateError);
+      }
+    }
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
@@ -239,6 +333,25 @@ export async function GET(request: Request) {
       .from('fever_order_items')
       .select('*', { count: 'exact', head: true });
 
+    // Per-run health: count recent runs with non-empty errors, and the
+    // most-recent started_at. Cheap signal Pat can fall back to when the
+    // fever_sync_runs read path itself fails.
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentRuns } = await supabase
+      .from('fever_sync_runs')
+      .select('started_at, errors')
+      .gte('started_at', since24h);
+    const recent_errors_count = (recentRuns ?? []).filter((r) => {
+      const errs = r.errors as unknown;
+      return Array.isArray(errs) && errs.length > 0;
+    }).length;
+    const most_recent_run_at =
+      (recentRuns ?? []).reduce<string | null>((acc, r) => {
+        if (!r.started_at) return acc;
+        if (!acc || r.started_at > acc) return r.started_at;
+        return acc;
+      }, null);
+
     return NextResponse.json({
       status: 'ok',
       configured: !!(process.env.FEVER_USERNAME && process.env.FEVER_PASSWORD),
@@ -248,6 +361,8 @@ export async function GET(request: Request) {
       itemCount,
       totalOrdersSynced: syncState?.orders_synced,
       totalItemsSynced: syncState?.items_synced,
+      recent_errors_count,
+      most_recent_run_at,
     });
   }
 
@@ -256,7 +371,8 @@ export async function GET(request: Request) {
   }
 
   const skipSlack = searchParams.get('skipSlack') === 'true';
-  return runSync(false, skipSlack);
+  const skipSegment = searchParams.get('skipSegment') === 'true';
+  return runSync(false, skipSlack, skipSegment);
 }
 
 export async function POST(request: Request) {
@@ -268,6 +384,25 @@ export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const isManual = searchParams.get('manual') === 'true';
   const skipSlack = searchParams.get('skipSlack') === 'true';
+  const skipSegment = searchParams.get('skipSegment') === 'true';
 
-  return runSync(isManual, skipSlack);
+  let manualDateFrom: string | undefined;
+  let manualDateTo: string | undefined;
+  if (isManual) {
+    const dateFromParam = searchParams.get('date_from');
+    const dateToParam = searchParams.get('date_to');
+    if ((dateFromParam && !dateToParam) || (!dateFromParam && dateToParam)) {
+      return NextResponse.json(
+        {
+          error:
+            'date_from and date_to must both be provided together (YYYY-MM-DD). Omit both for a full re-pull.',
+        },
+        { status: 400 },
+      );
+    }
+    manualDateFrom = dateFromParam || undefined;
+    manualDateTo = dateToParam || undefined;
+  }
+
+  return runSync(isManual, skipSlack, skipSegment, manualDateFrom, manualDateTo);
 }

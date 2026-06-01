@@ -85,7 +85,7 @@ See `src/lib/fever.ts` for the full type definitions (`FeverApiOrder`, `FeverApi
 3. Upsert orders in batches of 100 (`ON CONFLICT fever_order_id`)
 4. Upsert items in batches of 100 (`ON CONFLICT fever_order_id, fever_item_id`)
 5. Send Slack notifications for new orders (up to 10 per sync)
-6. Update `fever_sync_state` with current timestamp and latest `order_created_at`
+6. Update `fever_sync_state` only if all batches succeeded; otherwise leave the watermark unchanged so the next tick retries the failed window. `last_sync_at` always advances (errored vs didn't-run stays distinguishable). The watermark itself is computed only over orders whose upsert batch succeeded — the rule is "advance no further than the data we actually wrote." This guards against the 2026-05-27 silent-data-loss class of bug.
 
 ### Sync state table
 
@@ -142,6 +142,68 @@ curl -X POST "https://dashboard.icelandeclipse.com/api/cron/fever-sync?manual=tr
   -H "Authorization: Bearer <CRON_SECRET>"
 ```
 
+### Manual / backfill query params
+
+| Param | Where | Effect |
+|-------|-------|--------|
+| `manual=true` | GET or POST | Run as a manual sync. Without `date_from`/`date_to`, re-pulls the entire Fever archive (slow). |
+| `date_from=YYYY-MM-DD` | POST + manual | Lower bound for the Fever search window. Must be paired with `date_to`. |
+| `date_to=YYYY-MM-DD` | POST + manual | Upper bound. Both required together; supplying only one returns 400. |
+| `skipSlack=true` | GET or POST | Suppress the new-order Slack notifications for this run. |
+| `skipSegment=true` | GET or POST | Suppress the entire Segment block (identify + track for new orders, cancellation tracking for existing). Use for Supabase-only repair when Segment replay is a separate decision. |
+
+Example targeted backfill (e.g. repairing the 2026-05-27 gap):
+
+```bash
+curl -X POST "https://dashboard.icelandeclipse.com/api/cron/fever-sync?manual=true&date_from=2026-05-26&date_to=2026-05-28&skipSegment=true" \
+  -H "Authorization: Bearer <CRON_SECRET>"
+```
+
+### Run logging
+
+Every invocation of `runSync` writes a row to `fever_sync_runs` (schema in migration `015_fever_sync_runs.sql`):
+
+```sql
+fever_sync_runs (
+  id                    bigserial PRIMARY KEY,
+  started_at            timestamptz NOT NULL DEFAULT now(),
+  finished_at           timestamptz,
+  kind                  text CHECK (kind IN ('incremental','manual','health-check')),
+  orders_fetched        int,
+  orders_inserted       int,
+  orders_updated        int,
+  errors                jsonb,       -- [{index, message}]
+  reconciliation        jsonb,       -- { deltas: [{day, fever_count, supabase_count, missing_ids, extra_ids}] }
+  watermark_advanced_to timestamptz, -- null when an error held the watermark
+  skipped_segment       boolean DEFAULT false
+)
+```
+
+The `?status=true` endpoint surfaces aggregate signals from this table:
+
+- `recent_errors_count`: runs in the last 24h with non-empty `errors`.
+- `most_recent_run_at`: latest `started_at`.
+
+Pat (hermes-side) polls this table to post failure summaries to `#pat-health`.
+
+### Reconciliation
+
+`/api/cron/fever-health-check` runs daily (Vercel cron `0 4 * * *`). For each of the previous 7 UTC calendar days it independently queries Fever and Supabase and reports any order-id deltas. On Sundays it additionally checks days 8..90 ("weekly deep check") for slow-developing drift.
+
+Results write to `fever_sync_runs` with `kind='health-check'` and `reconciliation` populated. **Detect-only** — discrepancies do not auto-fire backfills. Jon decides what to do with each delta. The eventual auto-fix flow (Phase 3b v2) will always set `skipSegment=true` so Segment replay stays a human decision.
+
+This is the only layer that doesn't trust the sync's self-reported success. It catches both silent-batch-error gaps and Fever-returned-incomplete-data gaps, which the per-run error log cannot.
+
+### Martech replay policy
+
+Supabase is the system of record. Segment firing is a separate decision that requires human (Jameson + Mitch) sign-off whenever it's a backfill — never automatic. Reasons:
+
+- Late `Order Completed` events can re-trigger CIO campaigns (e.g. thank-you emails sent 5 days delayed).
+- `firstTouchReferringDomain` can flip retroactively if a buyer has post-gap purchases already in CIO.
+- BigQuery dupes, Amplitude funnel/retention skew, MTU billing.
+
+Mechanism for replays: targeted Supabase repair via `?manual=true&date_from=...&date_to=...&skipSegment=true`, then a separate `scripts/segment-replay-fever-orders.ts` invocation gated on Jameson's approval (with `--skip-first-touch` on by default).
+
 ## Revenue Calculation
 
 **File**: `src/app/api/fever/route.ts` (`getFeverMetrics`)
@@ -165,11 +227,13 @@ Revenue is also broken down by `plan_id` for per-product reporting.
 | File | Purpose |
 |------|---------|
 | `src/lib/fever.ts` | Fever API client, auth, search/poll/fetch flow, type transforms |
-| `src/app/api/cron/fever-sync/route.ts` | Cron endpoint, upsert logic, Slack notifications |
+| `src/app/api/cron/fever-sync/route.ts` | Cron endpoint, upsert logic, Slack notifications, Segment events, run logging |
+| `src/app/api/cron/fever-health-check/route.ts` | Daily reconciliation cron — independent Fever-vs-Supabase delta check |
 | `src/app/api/fever/route.ts` | Dashboard API: metrics, sync state, debug info, manual sync trigger |
 | `src/lib/fever-client.ts` | Client-side helpers for fetching metrics/sync state from `/api/fever` |
 | `src/lib/supabase.ts` | Supabase client |
-| `vercel.json` | Cron schedule (`*/5 * * * *`) |
+| `supabase/migrations/015_fever_sync_runs.sql` | Per-run log table |
+| `vercel.json` | Cron schedules (`*/5 * * * *` for sync, `0 4 * * *` for reconciliation) |
 
 ## Querying Fever Data Directly
 

@@ -36,12 +36,35 @@ async function runSync(
     errors: [],
   };
 
+  // Per-run log row id (fever_sync_runs). Populated after the env check so
+  // we don't write a row for misconfigured runs. Best-effort: a failure to
+  // insert is logged but does NOT block the sync.
+  let runLogId: number | null = null;
+  const runKind: 'incremental' | 'manual' = isManual ? 'manual' : 'incremental';
+
   try {
     if (!process.env.FEVER_USERNAME || !process.env.FEVER_PASSWORD) {
       return NextResponse.json(
         { error: 'Fever credentials not configured', configured: false },
         { status: 503 }
       );
+    }
+
+    {
+      const { data: runRow, error: runInsertError } = await supabase
+        .from('fever_sync_runs')
+        .insert({
+          started_at: new Date().toISOString(),
+          kind: runKind,
+          skipped_segment: skipSegment,
+        })
+        .select('id')
+        .single();
+      if (runInsertError) {
+        console.error('[Fever Sync] Failed to insert run-log row:', runInsertError);
+      } else {
+        runLogId = runRow?.id ?? null;
+      }
     }
 
     const { data: syncState, error: syncStateError } = await supabase
@@ -239,6 +262,23 @@ async function runSync(
       })
       .eq('id', 1);
 
+    if (runLogId !== null) {
+      const { error: runUpdateError } = await supabase
+        .from('fever_sync_runs')
+        .update({
+          finished_at: new Date().toISOString(),
+          orders_fetched: orders.length,
+          orders_inserted: stats.ordersInserted,
+          orders_updated: stats.ordersUpdated,
+          errors: stats.errors.map((message, index) => ({ index, message })),
+          watermark_advanced_to: hasErrors ? null : latestOrderCreated,
+        })
+        .eq('id', runLogId);
+      if (runUpdateError) {
+        console.error('[Fever Sync] Failed to update run-log row:', runUpdateError);
+      }
+    }
+
     console.log('[Fever Sync] Complete:', stats);
 
     return NextResponse.json({
@@ -246,10 +286,24 @@ async function runSync(
       stats,
       errors_count: stats.errors.length,
       watermark_held: hasErrors,
+      runId: runLogId,
       syncedAt: new Date().toISOString(),
     });
   } catch (error) {
     console.error('[Fever Sync] Error:', error);
+    if (runLogId !== null) {
+      const { error: runUpdateError } = await supabase
+        .from('fever_sync_runs')
+        .update({
+          finished_at: new Date().toISOString(),
+          errors: [{ index: 0, message: `fatal: ${String(error)}` }],
+          watermark_advanced_to: null,
+        })
+        .eq('id', runLogId);
+      if (runUpdateError) {
+        console.error('[Fever Sync] Failed to update run-log row after fatal error:', runUpdateError);
+      }
+    }
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
@@ -273,6 +327,25 @@ export async function GET(request: Request) {
       .from('fever_order_items')
       .select('*', { count: 'exact', head: true });
 
+    // Per-run health: count recent runs with non-empty errors, and the
+    // most-recent started_at. Cheap signal Pat can fall back to when the
+    // fever_sync_runs read path itself fails.
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentRuns } = await supabase
+      .from('fever_sync_runs')
+      .select('started_at, errors')
+      .gte('started_at', since24h);
+    const recent_errors_count = (recentRuns ?? []).filter((r) => {
+      const errs = r.errors as unknown;
+      return Array.isArray(errs) && errs.length > 0;
+    }).length;
+    const most_recent_run_at =
+      (recentRuns ?? []).reduce<string | null>((acc, r) => {
+        if (!r.started_at) return acc;
+        if (!acc || r.started_at > acc) return r.started_at;
+        return acc;
+      }, null);
+
     return NextResponse.json({
       status: 'ok',
       configured: !!(process.env.FEVER_USERNAME && process.env.FEVER_PASSWORD),
@@ -282,6 +355,8 @@ export async function GET(request: Request) {
       itemCount,
       totalOrdersSynced: syncState?.orders_synced,
       totalItemsSynced: syncState?.items_synced,
+      recent_errors_count,
+      most_recent_run_at,
     });
   }
 

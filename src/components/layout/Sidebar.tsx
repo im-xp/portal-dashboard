@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Mail,
   HandHeart,
+  Megaphone,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,7 @@ const navigation: NavItem[] = [
   { name: 'Overview', href: '/', icon: LayoutDashboard, roles: ['admin'] },
   { name: 'People', href: '/people', icon: Users, roles: ['admin'] },
   { name: 'Products', href: '/products', icon: Package, roles: ['admin'] },
+  { name: 'Marketing', href: '/marketing', icon: Megaphone, roles: ['admin'] },
   { name: 'Applications', href: '/applications', icon: FileText, roles: ['admin'] },
   { name: 'Volunteers', href: '/volunteers', icon: HandHeart },
   { name: 'Email Queue', href: '/email-queue', icon: Mail, roles: ['admin'] },

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import {
   buildCsv,
   fileNameForSeedType,
@@ -14,6 +14,16 @@ export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 1000;
 const META_HEADERS = ['email', 'fn', 'ln', 'doby', 'dobm', 'dobd', 'ct', 'st', 'zp', 'country'];
+const GENERIC_EXPORT_ERROR = 'Failed to build seed export.';
+
+const feverSupabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  '';
+const feverSupabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  '';
 
 interface BuyerOrderRow {
   buyer_email: string | null;
@@ -55,6 +65,19 @@ interface EmailOnlyRow {
   owner_email?: string | null;
 }
 
+function createFeverReadOnlySupabaseClient() {
+  if (!feverSupabaseUrl || !feverSupabaseAnonKey) {
+    return null;
+  }
+
+  return createClient(feverSupabaseUrl, feverSupabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
 function getSeedType(value: string | null): SeedType | null {
   if (value === 'buyers' || value === 'owners' || value === 'exclusion') {
     return value;
@@ -71,7 +94,10 @@ function getOrderGeo(row: OwnerItemRow['fever_orders']) {
   return Array.isArray(row) ? row[0] ?? null : row;
 }
 
-async function fetchAllBuyerRows(marketingOnly: boolean): Promise<BuyerOrderRow[]> {
+async function fetchAllBuyerRows(
+  supabase: NonNullable<ReturnType<typeof createFeverReadOnlySupabaseClient>>,
+  marketingOnly: boolean
+): Promise<BuyerOrderRow[]> {
   const rows: BuyerOrderRow[] = [];
   let offset = 0;
 
@@ -82,6 +108,7 @@ async function fetchAllBuyerRows(marketingOnly: boolean): Promise<BuyerOrderRow[
         'buyer_email,buyer_first_name,buyer_last_name,buyer_dob,purchase_city,purchase_region,purchase_postal,billing_zip_code,purchase_country'
       )
       .not('buyer_email', 'is', null)
+      .order('fever_order_id', { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);
 
     if (marketingOnly) {
@@ -109,7 +136,10 @@ async function fetchAllBuyerRows(marketingOnly: boolean): Promise<BuyerOrderRow[
   return rows;
 }
 
-async function fetchAllOwnerRows(marketingOnly: boolean): Promise<OwnerItemRow[]> {
+async function fetchAllOwnerRows(
+  supabase: NonNullable<ReturnType<typeof createFeverReadOnlySupabaseClient>>,
+  marketingOnly: boolean
+): Promise<OwnerItemRow[]> {
   const rows: OwnerItemRow[] = [];
   let offset = 0;
 
@@ -120,6 +150,8 @@ async function fetchAllOwnerRows(marketingOnly: boolean): Promise<OwnerItemRow[]
         'owner_email,owner_first_name,owner_last_name,owner_dob,fever_orders!inner(purchase_city,purchase_region,purchase_postal,billing_zip_code,purchase_country)'
       )
       .not('owner_email', 'is', null)
+      .order('fever_order_id', { ascending: true })
+      .order('fever_item_id', { ascending: true })
       .range(offset, offset + PAGE_SIZE - 1);
 
     if (marketingOnly) {
@@ -147,16 +179,26 @@ async function fetchAllOwnerRows(marketingOnly: boolean): Promise<OwnerItemRow[]
   return rows;
 }
 
-async function fetchAllEmails(table: 'fever_orders' | 'fever_order_items', column: 'buyer_email' | 'owner_email') {
+async function fetchAllEmails(
+  supabase: NonNullable<ReturnType<typeof createFeverReadOnlySupabaseClient>>,
+  table: 'fever_orders' | 'fever_order_items',
+  column: 'buyer_email' | 'owner_email'
+) {
   const rows: string[] = [];
   let offset = 0;
 
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from(table)
       .select(column)
-      .not(column, 'is', null)
-      .range(offset, offset + PAGE_SIZE - 1);
+      .not(column, 'is', null);
+
+    query =
+      table === 'fever_orders'
+        ? query.order('fever_order_id', { ascending: true })
+        : query.order('fever_order_id', { ascending: true }).order('fever_item_id', { ascending: true });
+
+    const { data, error } = await query.range(offset, offset + PAGE_SIZE - 1);
 
     if (error) {
       throw new Error(error.message);
@@ -191,8 +233,10 @@ function rowsToCsv(rows: SeedRow[]) {
   );
 }
 
-async function buildBuyersSeed(): Promise<{ csv: string; buyerEmails: Set<string> }> {
-  const buyerOrders = await fetchAllBuyerRows(true);
+async function buildBuyersSeed(
+  supabase: NonNullable<ReturnType<typeof createFeverReadOnlySupabaseClient>>
+): Promise<{ csv: string; buyerEmails: Set<string> }> {
+  const buyerOrders = await fetchAllBuyerRows(supabase, true);
   const seedRows = mergeBestSeedRows(
     buyerOrders
       .map((row) =>
@@ -217,11 +261,14 @@ async function buildBuyersSeed(): Promise<{ csv: string; buyerEmails: Set<string
   };
 }
 
-async function buildOwnersSeed(): Promise<string> {
-  const [{ buyerEmails }, ownerItems] = await Promise.all([
-    buildBuyersSeed(),
-    fetchAllOwnerRows(true),
+async function buildOwnersSeed(
+  supabase: NonNullable<ReturnType<typeof createFeverReadOnlySupabaseClient>>
+): Promise<string> {
+  const [buyerEmails, ownerItems] = await Promise.all([
+    fetchAllEmails(supabase, 'fever_orders', 'buyer_email'),
+    fetchAllOwnerRows(supabase, true),
   ]);
+  const buyerEmailSet = new Set(buyerEmails);
 
   const seedRows = mergeBestSeedRows(
     ownerItems
@@ -240,16 +287,18 @@ async function buildOwnersSeed(): Promise<string> {
         });
       })
       .filter((row): row is SeedRow => row !== null)
-      .filter((row) => !buyerEmails.has(row.email))
+      .filter((row) => !buyerEmailSet.has(row.email))
   );
 
   return rowsToCsv(seedRows);
 }
 
-async function buildExclusionCsv(): Promise<string> {
+async function buildExclusionCsv(
+  supabase: NonNullable<ReturnType<typeof createFeverReadOnlySupabaseClient>>
+): Promise<string> {
   const [buyerEmails, ownerEmails] = await Promise.all([
-    fetchAllEmails('fever_orders', 'buyer_email'),
-    fetchAllEmails('fever_order_items', 'owner_email'),
+    fetchAllEmails(supabase, 'fever_orders', 'buyer_email'),
+    fetchAllEmails(supabase, 'fever_order_items', 'owner_email'),
   ]);
 
   const uniqueEmails = Array.from(new Set([...buyerEmails, ...ownerEmails])).sort((a, b) => a.localeCompare(b));
@@ -264,17 +313,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Invalid type. Use buyers, owners, or exclusion.' }, { status: 400 });
   }
 
+  const supabase = createFeverReadOnlySupabaseClient();
   if (!supabase) {
-    return NextResponse.json({ error: 'Supabase client is not configured.' }, { status: 500 });
+    return NextResponse.json({ error: GENERIC_EXPORT_ERROR }, { status: 500 });
   }
 
   try {
     const csv =
       type === 'buyers'
-        ? (await buildBuyersSeed()).csv
+        ? (await buildBuyersSeed(supabase)).csv
         : type === 'owners'
-          ? await buildOwnersSeed()
-          : await buildExclusionCsv();
+          ? await buildOwnersSeed(supabase)
+          : await buildExclusionCsv(supabase);
 
     const dateStamp = new Date().toISOString().slice(0, 10);
 
@@ -285,7 +335,8 @@ export async function GET(request: Request) {
         'Cache-Control': 'no-store',
       },
     });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to build seed export.' }, { status: 500 });
+  } catch {
+    console.error('[Fever Lookalike Seed] Export failed');
+    return NextResponse.json({ error: GENERIC_EXPORT_ERROR }, { status: 500 });
   }
 }

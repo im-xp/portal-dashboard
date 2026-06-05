@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Package, DollarSign, TrendingUp, Ticket, RefreshCw, ChevronDown, ChevronRight, Search, X, MapPin, Calendar, User, CreditCard, Tag, MessageSquare, Globe, Info } from 'lucide-react';
+import { Package, DollarSign, TrendingUp, Ticket, RefreshCw, ChevronDown, ChevronRight, Search, X, MapPin, Calendar, User, CreditCard, Tag, MessageSquare, Globe, Info, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -922,16 +922,44 @@ export default function ProductsPage() {
             {/* Orders Section - Collapsible */}
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-1">
-                    Orders ({feverOrders?.total || 0})
-                    <InfoTooltip text="All orders in database, including those with only cancelled items. May differ from metric above." className="text-zinc-400 h-3.5 w-3.5" />
-                  </CardTitle>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-2">
+                    <CardTitle className="text-base flex items-center gap-1">
+                      Orders ({feverOrders?.total || 0})
+                      <InfoTooltip text="All orders in database, including those with only cancelled items. May differ from metric above." className="text-zinc-400 h-3.5 w-3.5" />
+                    </CardTitle>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                      <div className="flex items-center gap-2 text-sm font-medium text-amber-900">
+                        <Download className="h-4 w-4" />
+                        Export seed CSV
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                        Internal only. Buyers/owners seeds are marketing-pref filtered; exclusion includes all ticket-holder emails for suppression.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button asChild variant="outline" size="sm" className="bg-white">
+                          <a href="/api/fever/lookalike-seed?type=buyers" download="fever-buyers-seed.csv">
+                            Buyers seed CSV
+                          </a>
+                        </Button>
+                        <Button asChild variant="outline" size="sm" className="bg-white">
+                          <a href="/api/fever/lookalike-seed?type=owners" download="fever-owners-seed.csv">
+                            Owners seed CSV
+                          </a>
+                        </Button>
+                        <Button asChild variant="outline" size="sm" className="bg-white">
+                          <a href="/api/fever/lookalike-seed?type=exclusion" download="fever-exclusion.csv">
+                            Exclusion CSV
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setExpandedOrders(new Set())}
-                    className="text-xs"
+                    className="text-xs self-start"
                   >
                     Collapse All
                   </Button>

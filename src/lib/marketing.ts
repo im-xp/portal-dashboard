@@ -79,10 +79,10 @@ async function fetchAll<T>(table: string, columns: string, orderBy: string[]): P
 
 function iso2(country: string | null | undefined): string {
   const c = (country ?? '').trim();
-  if (!c) return '';
+  if (!c || ['-', '—', 'unknown'].includes(c.toLowerCase())) return '';
   if (COUNTRY_ALIASES[c]) return COUNTRY_ALIASES[c];
-  if (c.length === 2) return c.toUpperCase();
-  return c.slice(0, 2).toUpperCase();
+  if (c.length === 2 && /^[A-Za-z]{2}$/.test(c)) return c.toUpperCase();
+  return '';
 }
 
 function normEmail(email: string | null | undefined): string {
@@ -354,9 +354,9 @@ async function computeLiveCampaign(): Promise<MarketingCampaignFixture> {
         : 'All non-US countries currently clear or miss the floor together; check the geo table.',
     },
     {
-      title: 'Top buyers are group purchasers',
+      title: 'Top buyers shape creative, not seed sizing',
       severity: 'high',
-      body: `The top decile averages ${avgTopTickets.toFixed(2)} tickets/items and ${Math.round(avgTopSpend / 100) / 10}k spend, indicating group-basket behavior around festival plus logistics.`,
+      body: `The top decile averages ${avgTopTickets.toFixed(2)} tickets/items and ${Math.round(avgTopSpend / 100) / 10}k spend, so use them to frame creative around group trip logistics while keeping the Meta source seed broad: all consented buyers.`,
     },
     {
       title: ownerSeedExcludingBuyers.length === 0 ? 'Owner seed adds no incremental reach' : 'Owner seed adds incremental reach',
@@ -417,8 +417,8 @@ async function computeLiveCampaign(): Promise<MarketingCampaignFixture> {
       ownerPrefOverlapBuyerSeed: ownerOverlap,
       exclusionAllTicketholderEmails: exclusionEmails.size,
       recommendation: ownerSeedExcludingBuyers.length === 0
-        ? 'Upload buyer seed and exclusion audience only after human execution approval. Owners seed adds no incremental consented reach.'
-        : 'Upload buyer seed, owner seed, and exclusion audience only after human execution approval.',
+        ? 'Proceed with Agustin’s recommendation: upload all consented Fever buyers as the Meta source seed, plus the all-ticketholders exclusion. Owners add no incremental consented reach.'
+        : 'Proceed with Agustin’s recommendation: upload all consented Fever buyers as the Meta source seed, plus owner incremental seed and all-ticketholders exclusion after human approval.',
     },
     topBuyerProfile: {
       definition: 'Top decile of paid buyers ranked by net item spend, excluding canceled/refunded/invite/zero-net rows.',
@@ -449,7 +449,7 @@ async function computeLiveCampaign(): Promise<MarketingCampaignFixture> {
     recommendedActions: [
       {
         owner: 'marketing',
-        action: 'Build US 1% buyer lookalike after human upload approval; attach all ticketholders exclusion.',
+        action: 'Use all consented Fever buyers as the Meta source audience; build/test US 1% lookalike after human upload approval and attach all-ticketholders exclusion.',
       },
       {
         owner: 'marketing',
@@ -457,7 +457,7 @@ async function computeLiveCampaign(): Promise<MarketingCampaignFixture> {
       },
       {
         owner: 'chad',
-        action: 'Regenerate seed CSV exports after the next Fever sync so uploads match what this dashboard shows.',
+        action: 'Keep regenerating all-buyer seed CSV exports after Fever syncs so uploads match what this dashboard shows.',
       },
     ],
   };

@@ -98,9 +98,9 @@ export default async function MarketingPage() {
 
         <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
           <MetricCard
-            title="Buyer Seed"
+            title="All Buyers Seed"
             value={formatInteger(campaign.seedCounts.buyerSeedMarketingPrefTrue)}
-            subtitle={`${formatInteger(campaign.population.paidDistinctBuyers)} paid distinct buyers in scope`}
+            subtitle="Consented Fever buyers for Meta source audience"
             icon={<Users className="h-5 w-5" />}
           />
           <MetricCard
@@ -110,7 +110,7 @@ export default async function MarketingPage() {
             icon={<Target className="h-5 w-5" />}
           />
           <MetricCard
-            title="Top-Decile Spend Share"
+            title="Top Buyers = Creative Brief"
             value={formatPercent(campaign.topBuyerProfile.spendSharePct)}
             subtitle={`${formatCurrency(campaign.topBuyerProfile.spend)} from ${formatInteger(campaign.topBuyerProfile.buyers)} buyers`}
             icon={<ShoppingBag className="h-5 w-5" />}
@@ -213,7 +213,9 @@ export default async function MarketingPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Top Buyer Profile</CardTitle>
-              <p className="text-sm text-zinc-500">{campaign.topBuyerProfile.definition}</p>
+              <p className="text-sm text-zinc-500">
+                {campaign.topBuyerProfile.definition} Use this for creative and offer strategy; the Meta source seed is all consented Fever buyers.
+              </p>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -379,7 +381,7 @@ export default async function MarketingPage() {
                 {campaign.campaign.privacy.note}
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                CSV seeds remain outside the dashboard. Human upload approval required before Meta upload.
+                CSV seeds remain outside the dashboard. Upload the all-consented-buyers seed and ticketholder exclusion only after human approval.
               </div>
               <div className="space-y-3">
                 {campaign.recommendedActions.map((item) => (

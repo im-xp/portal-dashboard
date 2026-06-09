@@ -79,10 +79,10 @@ export interface MarketingCampaignFixture {
     spend: number;
     spendSharePct: number;
     avgSpend: number;
-    medianSpend: number;
+    medianSpend: number | null;
     tickets: number;
     avgTickets: number;
-    orders: number;
+    orders: number | null;
     avgAge: number | null;
     medianAge: number | null;
     ageCoverage: number;
@@ -103,7 +103,7 @@ export interface MarketingCampaignFixture {
 }
 
 /**
- * Point-in-time snapshot of the live computation (2026-06-05). Served only as
+ * Point-in-time snapshot of the live computation (2026-06-09). Served only as
  * a fallback when the live Supabase query in `@/lib/marketing` fails.
  */
 export const icelandEclipseSnapshot: MarketingCampaignFixture = {
@@ -112,7 +112,7 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
     name: 'Iceland Eclipse Lookalike Audience',
     event: 'Iceland Eclipse Festival 2026',
     eventWindow: '2026-08-11 to 2026-08-15',
-    generatedAtUtc: '2026-06-05T02:08:54Z',
+    generatedAtUtc: '2026-06-09T18:40:27Z',
     dataSources: ['fever_orders', 'fever_order_items', 'fever_sales_flat'],
     privacy: {
       gate1PartnerTerms: 'unlocked',
@@ -122,56 +122,56 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
   },
   freshness: {
     feverSyncStateRows: 0,
-    fallbackMaxSyncedAt: '2026-06-05T02:05:41.854Z',
-    fallbackMaxOrderCreatedAt: '2026-06-05T01:11:46.715Z',
-    ordersRows: 3260,
-    itemsRows: 5691,
-    salesFlatRows: 5691,
+    fallbackMaxSyncedAt: '2026-06-09T16:40:29.968+00:00',
+    fallbackMaxOrderCreatedAt: '2026-06-09T15:07:07.848+00:00',
+    ordersRows: 3328,
+    itemsRows: 5798,
+    salesFlatRows: 5798,
     caveat: 'fever_sync_state was readable but empty; fallback timestamps from fever_orders are used.',
   },
   population: {
-    paidIncludedFlatRows: 4524,
-    paidDistinctBuyers: 1151,
+    paidIncludedFlatRows: 4336,
+    paidDistinctBuyers: 1289,
     excludedPaidRowReasons: {
-      zeroNet: 830,
-      badStatus: 253,
-      invite: 82,
-      missingEmail: 2,
+      zeroNet: 1151,
+      badStatus: 234,
+      invite: 71,
+      missingEmail: 6,
     },
   },
   seedCounts: {
-    allDistinctBuyerEmails: 2126,
-    buyerSeedMarketingPrefTrue: 315,
+    allDistinctBuyerEmails: 2147,
+    buyerSeedMarketingPrefTrue: 317,
     buyerSeedPassRatePct: 14.8,
-    allDistinctOwnerEmails: 2129,
+    allDistinctOwnerEmails: 2150,
     ownerSeedMarketingPrefTrueExcludingBuyers: 0,
-    ownerPrefTrueDistinct: 315,
-    ownerPrefOverlapBuyerSeed: 315,
-    exclusionAllTicketholderEmails: 2129,
-    recommendation: 'Upload buyer seed and exclusion audience only after human execution approval. Owners seed adds no incremental consented reach.',
+    ownerPrefTrueDistinct: 317,
+    ownerPrefOverlapBuyerSeed: 317,
+    exclusionAllTicketholderEmails: 2150,
+    recommendation: 'Proceed with Agustin’s recommendation: upload all consented Fever buyers as the Meta source seed, plus the all-ticketholders exclusion. Owners seed adds no incremental consented reach.',
   },
   topBuyerProfile: {
     definition: 'Top decile of paid buyers ranked by net item spend, excluding canceled/refunded/invite/zero-net rows.',
-    buyers: 116,
-    spend: 1458678.43,
-    spendSharePct: 41.1,
-    avgSpend: 12574.81,
-    medianSpend: 10386.14,
-    tickets: 945,
-    avgTickets: 8.15,
-    orders: 318,
+    buyers: 129,
+    spend: 1365634.44,
+    spendSharePct: 38.5,
+    avgSpend: 10586.31,
+    medianSpend: null,
+    tickets: 805,
+    avgTickets: 6.24,
+    orders: null,
     avgAge: null,
     medianAge: null,
     ageCoverage: 0,
     countries: [
-      { country: 'US', buyers: 79 },
-      { country: 'unknown', buyers: 12 },
-      { country: 'CA', buyers: 4 },
+      { country: 'US', buyers: 95 },
+      { country: 'unknown', buyers: 10 },
+      { country: 'CA', buyers: 5 },
       { country: 'AU', buyers: 3 },
       { country: 'GB', buyers: 2 },
     ],
     languages: [
-      { language: 'en', buyers: 111 },
+      { language: 'en', buyers: 126 },
       { language: 'it', buyers: 1 },
       { language: 'nl', buyers: 1 },
       { language: 'de', buyers: 1 },
@@ -179,8 +179,8 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
       { language: 'fr', buyers: 1 },
     ],
     channels: [
-      { channel: 'marketplace', buyers: 111 },
-      { channel: 'affiliate_portal', buyers: 5 },
+      { channel: 'marketplace', buyers: 125 },
+      { channel: 'affiliate_portal', buyers: 4 },
     ],
     plans: [
       { plan: 'Iceland Eclipse Festival 2026 — August 11-15', buyers: 66 },
@@ -207,12 +207,12 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
     expectedMatchRateLowPct: 40,
     expectedMatchRateHighPct: 60,
     rows: [
-      { country: 'US', consentedBuyerSourceCount: 174, expectedMatchLow: 69, expectedMatchHigh: 104, viability: 'yellow', recommendation: 'Test US lookalike after upload approval.' },
-      { country: 'unknown', consentedBuyerSourceCount: 37, expectedMatchLow: 14, expectedMatchHigh: 22, viability: 'red', recommendation: 'Do not use as a country lookalike seed.' },
-      { country: 'AU', consentedBuyerSourceCount: 12, expectedMatchLow: 4, expectedMatchHigh: 7, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
-      { country: 'GB', consentedBuyerSourceCount: 10, expectedMatchLow: 4, expectedMatchHigh: 6, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
+      { country: 'US', consentedBuyerSourceCount: 173, expectedMatchLow: 69, expectedMatchHigh: 103, viability: 'yellow', recommendation: 'Test US lookalike after upload approval.' },
+      { country: 'unknown', consentedBuyerSourceCount: 41, expectedMatchLow: 16, expectedMatchHigh: 24, viability: 'red', recommendation: 'Do not use as a country lookalike seed.' },
+      { country: 'AU', consentedBuyerSourceCount: 11, expectedMatchLow: 4, expectedMatchHigh: 6, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
+      { country: 'GB', consentedBuyerSourceCount: 11, expectedMatchLow: 4, expectedMatchHigh: 6, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
       { country: 'CA', consentedBuyerSourceCount: 8, expectedMatchLow: 3, expectedMatchHigh: 4, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
-      { country: 'DE', consentedBuyerSourceCount: 6, expectedMatchLow: 2, expectedMatchHigh: 3, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
+      { country: 'DE', consentedBuyerSourceCount: 8, expectedMatchLow: 3, expectedMatchHigh: 4, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
       { country: 'NL', consentedBuyerSourceCount: 5, expectedMatchLow: 2, expectedMatchHigh: 3, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
       { country: 'IS', consentedBuyerSourceCount: 5, expectedMatchLow: 2, expectedMatchHigh: 3, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
     ],
@@ -221,7 +221,7 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
     {
       title: 'US is the only viable lookalike candidate',
       severity: 'high',
-      body: "The US has 174 consented buyer source records, which may clear Meta's 100 matched-user floor only if match rate lands near the high end.",
+      body: "The US has 173 consented buyer source records; expected match 69-103 vs Meta's 100 matched-user floor. This is yellow, not guaranteed.",
     },
     {
       title: 'Non-US lookalikes are too small',
@@ -229,14 +229,14 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
       body: 'AU, GB, CA, DE, NL, and IS are far below the source size needed for a country-specific lookalike seed.',
     },
     {
-      title: 'Top buyers are group purchasers',
+      title: 'Top buyers shape creative, not seed sizing',
       severity: 'high',
-      body: 'The top decile averages 8.15 tickets/items and 12.6k spend, indicating group-basket behavior around festival plus logistics.',
+      body: 'The top decile averages 6.24 tickets/items and 10.6k spend, so use them to frame creative around group trip logistics while keeping the Meta source seed broad: all consented buyers.',
     },
     {
       title: 'Owner seed adds no incremental reach',
       severity: 'medium',
-      body: 'All 315 consented owner emails overlap the buyer seed, so the owner seed is empty after excluding buyers.',
+      body: 'All 317 consented owner emails overlap the buyer seed, so the owner seed is empty after excluding buyers.',
     },
     {
       title: 'Use flight urgency in creative',
@@ -247,7 +247,7 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
   recommendedActions: [
     {
       owner: 'marketing',
-      action: 'Build US 1% buyer lookalike after human upload approval; attach all ticketholders exclusion.',
+      action: 'Use all consented Fever buyers as the Meta source audience; build/test US 1% lookalike after human upload approval and attach all-ticketholders exclusion.',
     },
     {
       owner: 'marketing',
@@ -255,7 +255,7 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
     },
     {
       owner: 'jon',
-      action: 'Keep PII CSVs out of dashboard and Supabase; dashboard demo should use this aggregate fixture only.',
+      action: 'Keep PII CSVs out of dashboard and Supabase; dashboard remains aggregate-only.',
     },
     {
       owner: 'chad',

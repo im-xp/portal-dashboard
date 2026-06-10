@@ -11,7 +11,8 @@ export interface MarketingBreakdownRow {
 
 export interface GeoViabilityRow {
   country: string;
-  consentedBuyerSourceCount: number;
+  eligibleSourceCount: number;
+  basis: string;
   expectedMatchLow: number;
   expectedMatchHigh: number;
   viability: Viability;
@@ -64,12 +65,13 @@ export interface MarketingCampaignFixture {
   };
   seedCounts: {
     allDistinctBuyerEmails: number;
-    buyerSeedMarketingPrefTrue: number;
-    buyerSeedPassRatePct: number;
+    usBuyerSeedAllBuyers: number;
+    usBuyerShareOfAllPct: number;
+    usBuyersConsentedSubset: number;
     allDistinctOwnerEmails: number;
-    ownerSeedMarketingPrefTrueExcludingBuyers: number;
+    ownerSeedConsentedExcludingBuyers: number;
     ownerPrefTrueDistinct: number;
-    ownerPrefOverlapBuyerSeed: number;
+    ownerPrefOverlapAllBuyers: number;
     exclusionAllTicketholderEmails: number;
     recommendation: string;
   };
@@ -103,8 +105,10 @@ export interface MarketingCampaignFixture {
 }
 
 /**
- * Point-in-time snapshot of the live computation (2026-06-09). Served only as
+ * Point-in-time snapshot of the live computation (2026-06-10). Served only as
  * a fallback when the live Supabase query in `@/lib/marketing` fails.
+ * Seed policy: US buyers without consent filter (Jon, 2026-06-10); non-US
+ * buyers remain consent-filtered for audience seeding.
  */
 export const icelandEclipseSnapshot: MarketingCampaignFixture = {
   campaign: {
@@ -112,7 +116,7 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
     name: 'Iceland Eclipse Lookalike Audience',
     event: 'Iceland Eclipse Festival 2026',
     eventWindow: '2026-08-11 to 2026-08-15',
-    generatedAtUtc: '2026-06-09T18:40:27Z',
+    generatedAtUtc: '2026-06-10T01:19:24Z',
     dataSources: ['fever_orders', 'fever_order_items', 'fever_sales_flat'],
     privacy: {
       gate1PartnerTerms: 'unlocked',
@@ -141,14 +145,15 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
   },
   seedCounts: {
     allDistinctBuyerEmails: 2147,
-    buyerSeedMarketingPrefTrue: 317,
-    buyerSeedPassRatePct: 14.8,
+    usBuyerSeedAllBuyers: 1215,
+    usBuyerShareOfAllPct: 56.6,
+    usBuyersConsentedSubset: 188,
     allDistinctOwnerEmails: 2150,
-    ownerSeedMarketingPrefTrueExcludingBuyers: 0,
+    ownerSeedConsentedExcludingBuyers: 0,
     ownerPrefTrueDistinct: 317,
-    ownerPrefOverlapBuyerSeed: 317,
+    ownerPrefOverlapAllBuyers: 317,
     exclusionAllTicketholderEmails: 2150,
-    recommendation: 'Proceed with Agustin’s recommendation: upload all consented Fever buyers as the Meta source seed, plus the all-ticketholders exclusion. Owners seed adds no incremental consented reach.',
+    recommendation: 'Upload all US Fever buyers (no consent filter — seeding sends no comms) as the Meta source seed, plus the all-ticketholders exclusion. Non-US buyers stay consent-filtered and are below lookalike floors. Owners add no incremental reach.',
   },
   topBuyerProfile: {
     definition: 'Top decile of paid buyers ranked by net item spend, excluding canceled/refunded/invite/zero-net rows.',
@@ -207,36 +212,36 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
     expectedMatchRateLowPct: 40,
     expectedMatchRateHighPct: 60,
     rows: [
-      { country: 'US', consentedBuyerSourceCount: 173, expectedMatchLow: 69, expectedMatchHigh: 103, viability: 'yellow', recommendation: 'Test US lookalike after upload approval.' },
-      { country: 'unknown', consentedBuyerSourceCount: 41, expectedMatchLow: 16, expectedMatchHigh: 24, viability: 'red', recommendation: 'Do not use as a country lookalike seed.' },
-      { country: 'AU', consentedBuyerSourceCount: 11, expectedMatchLow: 4, expectedMatchHigh: 6, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
-      { country: 'GB', consentedBuyerSourceCount: 11, expectedMatchLow: 4, expectedMatchHigh: 6, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
-      { country: 'CA', consentedBuyerSourceCount: 8, expectedMatchLow: 3, expectedMatchHigh: 4, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
-      { country: 'DE', consentedBuyerSourceCount: 8, expectedMatchLow: 3, expectedMatchHigh: 4, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
-      { country: 'NL', consentedBuyerSourceCount: 5, expectedMatchLow: 2, expectedMatchHigh: 3, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
-      { country: 'IS', consentedBuyerSourceCount: 5, expectedMatchLow: 2, expectedMatchHigh: 3, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
+      { country: 'US', eligibleSourceCount: 1215, basis: 'all buyers (no consent filter)', expectedMatchLow: 486, expectedMatchHigh: 729, viability: 'green', recommendation: 'Build US 1% lookalike after upload approval.' },
+      { country: 'unknown', eligibleSourceCount: 21, basis: 'consented only', expectedMatchLow: 8, expectedMatchHigh: 12, viability: 'red', recommendation: 'Do not use as a country lookalike seed.' },
+      { country: 'AU', eligibleSourceCount: 13, basis: 'consented only', expectedMatchLow: 5, expectedMatchHigh: 7, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
+      { country: 'CA', eligibleSourceCount: 10, basis: 'consented only', expectedMatchLow: 4, expectedMatchHigh: 6, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
+      { country: 'GB', eligibleSourceCount: 9, basis: 'consented only', expectedMatchLow: 3, expectedMatchHigh: 5, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
+      { country: 'IS', eligibleSourceCount: 6, basis: 'consented only', expectedMatchLow: 2, expectedMatchHigh: 3, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
+      { country: 'DE', eligibleSourceCount: 5, basis: 'consented only', expectedMatchLow: 2, expectedMatchHigh: 3, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
+      { country: 'NL', eligibleSourceCount: 5, basis: 'consented only', expectedMatchLow: 2, expectedMatchHigh: 3, viability: 'red', recommendation: 'Use aggregate or interest targeting only.' },
     ],
   },
   insights: [
     {
-      title: 'US is the only viable lookalike candidate',
+      title: 'US lookalike is solidly viable',
       severity: 'high',
-      body: "The US has 173 consented buyer source records; expected match 69-103 vs Meta's 100 matched-user floor. This is yellow, not guaranteed.",
+      body: "The US seed is 1,215 buyers (no consent filter for seeding); expected match 486-729 vs Meta's 100 matched-user floor. Green.",
     },
     {
       title: 'Non-US lookalikes are too small',
       severity: 'medium',
-      body: 'AU, GB, CA, DE, NL, and IS are far below the source size needed for a country-specific lookalike seed.',
+      body: 'Non-US buyers remain consent-filtered (EU custom-audience rules), and AU, CA, GB, IS, DE, and NL are far below the source size needed for a country-specific lookalike seed.',
     },
     {
       title: 'Top buyers shape creative, not seed sizing',
       severity: 'high',
-      body: 'The top decile averages 6.24 tickets/items and 10.6k spend, so use them to frame creative around group trip logistics while keeping the Meta source seed broad: all consented buyers.',
+      body: 'The top decile averages 6.24 tickets/items and 10.6k spend, so use them to frame creative around group trip logistics while keeping the Meta source seed broad: all US buyers.',
     },
     {
       title: 'Owner seed adds no incremental reach',
       severity: 'medium',
-      body: 'All 317 consented owner emails overlap the buyer seed, so the owner seed is empty after excluding buyers.',
+      body: 'All 317 consented owner emails are already among the distinct buyer emails, so the owner seed is empty after excluding buyers.',
     },
     {
       title: 'Use flight urgency in creative',
@@ -247,19 +252,19 @@ export const icelandEclipseSnapshot: MarketingCampaignFixture = {
   recommendedActions: [
     {
       owner: 'marketing',
-      action: 'Use all consented Fever buyers as the Meta source audience; build/test US 1% lookalike after human upload approval and attach all-ticketholders exclusion.',
+      action: 'Use all US Fever buyers (no consent filter) as the Meta source audience; build US 1% lookalike after human upload approval and attach all-ticketholders exclusion.',
     },
     {
       owner: 'marketing',
-      action: 'Avoid non-US lookalike ad sets until seed size grows; use aggregate geo and interest targeting instead.',
+      action: 'Keep non-US buyers consent-filtered for seeding; their lookalike pools are below floor anyway — use aggregate geo and interest targeting instead.',
     },
     {
       owner: 'jon',
-      action: 'Keep PII CSVs out of dashboard and Supabase; dashboard remains aggregate-only.',
+      action: "Confirm with Mitch that Fever's data clearance covers uploading buyer emails to Meta before approving the upload.",
     },
     {
       owner: 'chad',
-      action: 'Refresh this fixture after the next Fever sync or seed rebuild.',
+      action: 'Keep regenerating the US all-buyers seed CSV after Fever syncs so uploads match what this dashboard shows.',
     },
   ],
 };

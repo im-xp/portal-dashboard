@@ -287,28 +287,47 @@ async function computeLiveCampaign(): Promise<MarketingCampaignFixture> {
     .map(([month, count]) => ({ month, buyers: count }));
 
   const buyerAllEmails = new Set(orders.map((o) => normEmail(o.buyer_email)).filter(Boolean));
-  const buyerSeed = new Map<string, string>();
+
+  // Seed policy (Jon, 2026-06-10): US buyers join the Meta seed without the
+  // comms consent flag — seeding sends no messages and the US regime needs
+  // notice/opt-out, not opt-in. Non-US buyers stay consent-filtered (EU
+  // regulators treat custom-audience uploads as requiring consent).
+  const buyerCountry = new Map<string, string>();
+  const buyerConsented = new Set<string>();
   for (const order of orders) {
     const email = normEmail(order.buyer_email);
-    if (!email || !boolish(order.buyer_marketing_pref) || buyerSeed.has(email)) continue;
-    buyerSeed.set(email, iso2(order.purchase_country) || 'unknown');
+    if (!email) continue;
+    if (boolish(order.buyer_marketing_pref)) buyerConsented.add(email);
+    const country = iso2(order.purchase_country);
+    if (country && !buyerCountry.get(email)) buyerCountry.set(email, country);
+    else if (!buyerCountry.has(email)) buyerCountry.set(email, '');
   }
+  const usSeedEmails = [...buyerCountry.entries()].filter(([, c]) => c === 'US').map(([e]) => e);
+  const usSeedConsented = usSeedEmails.filter((e) => buyerConsented.has(e)).length;
 
   const ownerAllEmails = new Set(items.map((i) => normEmail(i.owner_email)).filter(Boolean));
   const ownerPrefEmails = new Set(
     items.filter((i) => boolish(i.owner_marketing_pref)).map((i) => normEmail(i.owner_email)).filter(Boolean),
   );
-  const ownerSeedExcludingBuyers = [...ownerPrefEmails].filter((e) => !buyerSeed.has(e));
+  const ownerSeedExcludingBuyers = [...ownerPrefEmails].filter((e) => !buyerAllEmails.has(e));
   const ownerOverlap = ownerPrefEmails.size - ownerSeedExcludingBuyers.length;
   const exclusionEmails = new Set([...buyerAllEmails, ...ownerAllEmails]);
 
-  const geoCounts = new Map<string, number>();
-  for (const country of buyerSeed.values()) {
-    geoCounts.set(country, (geoCounts.get(country) ?? 0) + 1);
+  const geoAllCounts = new Map<string, number>();
+  const geoConsentedCounts = new Map<string, number>();
+  for (const [email, iso] of buyerCountry) {
+    const country = iso || 'unknown';
+    geoAllCounts.set(country, (geoAllCounts.get(country) ?? 0) + 1);
+    if (buyerConsented.has(email)) {
+      geoConsentedCounts.set(country, (geoConsentedCounts.get(country) ?? 0) + 1);
+    }
   }
-  const geoRows: GeoViabilityRow[] = [...geoCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([country, count]) => {
+  const geoRows: GeoViabilityRow[] = [...geoAllCounts.keys()]
+    .map((country) => {
+      const noConsentFilter = country === 'US';
+      const count = noConsentFilter
+        ? geoAllCounts.get(country) ?? 0
+        : geoConsentedCounts.get(country) ?? 0;
       const low = Math.floor(count * MATCH_RATE_LOW);
       const high = Math.floor(count * MATCH_RATE_HIGH);
       const viability: Viability =
@@ -318,13 +337,16 @@ async function computeLiveCampaign(): Promise<MarketingCampaignFixture> {
         : 'red';
       return {
         country,
-        consentedBuyerSourceCount: count,
+        eligibleSourceCount: count,
+        basis: noConsentFilter ? 'all buyers (no consent filter)' : 'consented only',
         expectedMatchLow: low,
         expectedMatchHigh: high,
         viability,
         recommendation: geoRecommendation(country, viability),
       };
-    });
+    })
+    .filter((row) => row.eligibleSourceCount > 0)
+    .sort((a, b) => b.eligibleSourceCount - a.eligibleSourceCount);
 
   const usRow = geoRows.find((r) => r.country === 'US');
   const subFloorCountries = geoRows
@@ -337,33 +359,33 @@ async function computeLiveCampaign(): Promise<MarketingCampaignFixture> {
   const insights: MarketingInsight[] = [
     usRow
       ? {
-          title: usRow.viability === 'green' ? 'US lookalike is viable' : 'US is the only viable lookalike candidate',
+          title: usRow.viability === 'green' ? 'US lookalike is solidly viable' : 'US is the only viable lookalike candidate',
           severity: 'high',
-          body: `The US has ${usRow.consentedBuyerSourceCount} consented buyer source records (expected match ${usRow.expectedMatchLow}-${usRow.expectedMatchHigh} vs Meta's ${PLATFORM_FLOOR} matched-user floor).`,
+          body: `The US seed is ${usRow.eligibleSourceCount} buyers (no consent filter for seeding); expected match ${usRow.expectedMatchLow}-${usRow.expectedMatchHigh} vs Meta's ${PLATFORM_FLOOR} matched-user floor.`,
         }
       : {
           title: 'No US seed rows found',
           severity: 'high',
-          body: 'No consented US buyers in the current data; no country lookalike is viable.',
+          body: 'No US buyers in the current data; no country lookalike is viable.',
         },
     {
       title: 'Non-US lookalikes are too small',
       severity: 'medium',
       body: subFloorCountries.length
-        ? `${subFloorCountries.join(', ')} are below the source size needed for a country-specific lookalike seed.`
+        ? `Non-US buyers remain consent-filtered (EU custom-audience rules), and ${subFloorCountries.join(', ')} are below the source size needed for a country-specific lookalike seed.`
         : 'All non-US countries currently clear or miss the floor together; check the geo table.',
     },
     {
       title: 'Top buyers shape creative, not seed sizing',
       severity: 'high',
-      body: `The top decile averages ${avgTopTickets.toFixed(2)} tickets/items and ${Math.round(avgTopSpend / 100) / 10}k spend, so use them to frame creative around group trip logistics while keeping the Meta source seed broad: all consented buyers.`,
+      body: `The top decile averages ${avgTopTickets.toFixed(2)} tickets/items and ${Math.round(avgTopSpend / 100) / 10}k spend, so use them to frame creative around group trip logistics while keeping the Meta source seed broad: all US buyers.`,
     },
     {
       title: ownerSeedExcludingBuyers.length === 0 ? 'Owner seed adds no incremental reach' : 'Owner seed adds incremental reach',
       severity: 'medium',
       body: ownerSeedExcludingBuyers.length === 0
-        ? `All ${ownerPrefEmails.size} consented owner emails overlap the buyer seed, so the owner seed is empty after excluding buyers.`
-        : `${ownerSeedExcludingBuyers.length} consented owner emails fall outside the buyer seed and add incremental reach.`,
+        ? `All ${ownerPrefEmails.size} consented owner emails are already among the distinct buyer emails, so the owner seed is empty after excluding buyers.`
+        : `${ownerSeedExcludingBuyers.length} consented owner emails fall outside the buyer base and add incremental reach.`,
     },
     {
       title: 'Use flight urgency in creative',
@@ -409,16 +431,17 @@ async function computeLiveCampaign(): Promise<MarketingCampaignFixture> {
     },
     seedCounts: {
       allDistinctBuyerEmails: buyerAllEmails.size,
-      buyerSeedMarketingPrefTrue: buyerSeed.size,
-      buyerSeedPassRatePct: buyerAllEmails.size ? round2((100 * buyerSeed.size) / buyerAllEmails.size) : 0,
+      usBuyerSeedAllBuyers: usSeedEmails.length,
+      usBuyerShareOfAllPct: buyerAllEmails.size ? round2((100 * usSeedEmails.length) / buyerAllEmails.size) : 0,
+      usBuyersConsentedSubset: usSeedConsented,
       allDistinctOwnerEmails: ownerAllEmails.size,
-      ownerSeedMarketingPrefTrueExcludingBuyers: ownerSeedExcludingBuyers.length,
+      ownerSeedConsentedExcludingBuyers: ownerSeedExcludingBuyers.length,
       ownerPrefTrueDistinct: ownerPrefEmails.size,
-      ownerPrefOverlapBuyerSeed: ownerOverlap,
+      ownerPrefOverlapAllBuyers: ownerOverlap,
       exclusionAllTicketholderEmails: exclusionEmails.size,
       recommendation: ownerSeedExcludingBuyers.length === 0
-        ? 'Proceed with Agustin’s recommendation: upload all consented Fever buyers as the Meta source seed, plus the all-ticketholders exclusion. Owners add no incremental consented reach.'
-        : 'Proceed with Agustin’s recommendation: upload all consented Fever buyers as the Meta source seed, plus owner incremental seed and all-ticketholders exclusion after human approval.',
+        ? 'Upload all US Fever buyers (no consent filter — seeding sends no comms) as the Meta source seed, plus the all-ticketholders exclusion. Non-US buyers stay consent-filtered. Owners add no incremental reach.'
+        : 'Upload all US Fever buyers (no consent filter — seeding sends no comms) as the Meta source seed, plus owner incremental seed and all-ticketholders exclusion after human approval. Non-US buyers stay consent-filtered.',
     },
     topBuyerProfile: {
       definition: 'Top decile of paid buyers ranked by net item spend, excluding canceled/refunded/invite/zero-net rows.',
@@ -449,15 +472,19 @@ async function computeLiveCampaign(): Promise<MarketingCampaignFixture> {
     recommendedActions: [
       {
         owner: 'marketing',
-        action: 'Use all consented Fever buyers as the Meta source audience; build/test US 1% lookalike after human upload approval and attach all-ticketholders exclusion.',
+        action: 'Use all US Fever buyers (no consent filter) as the Meta source audience; build US 1% lookalike after human upload approval and attach all-ticketholders exclusion.',
       },
       {
         owner: 'marketing',
-        action: 'Avoid non-US lookalike ad sets until seed size grows; use aggregate geo and interest targeting instead.',
+        action: 'Keep non-US buyers consent-filtered for seeding; their lookalike pools are below floor anyway — use aggregate geo and interest targeting instead.',
+      },
+      {
+        owner: 'jon',
+        action: "Confirm with Mitch that Fever's data clearance covers uploading buyer emails to Meta before approving the upload.",
       },
       {
         owner: 'chad',
-        action: 'Keep regenerating all-buyer seed CSV exports after Fever syncs so uploads match what this dashboard shows.',
+        action: 'Keep regenerating the US all-buyers seed CSV after Fever syncs so uploads match what this dashboard shows.',
       },
     ],
   };

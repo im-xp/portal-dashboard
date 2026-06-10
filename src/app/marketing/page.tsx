@@ -98,15 +98,15 @@ export default async function MarketingPage() {
 
         <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
           <MetricCard
-            title="All Buyers Seed"
-            value={formatInteger(campaign.seedCounts.buyerSeedMarketingPrefTrue)}
-            subtitle="Consented Fever buyers for Meta source audience"
+            title="US Buyers Seed"
+            value={formatInteger(campaign.seedCounts.usBuyerSeedAllBuyers)}
+            subtitle={`of ${formatInteger(campaign.seedCounts.allDistinctBuyerEmails)} total buyers — US-only, no consent filter for seeding`}
             icon={<Users className="h-5 w-5" />}
           />
           <MetricCard
-            title="Consent Pass Rate"
-            value={formatPercent(campaign.seedCounts.buyerSeedPassRatePct)}
-            subtitle={`${formatInteger(campaign.seedCounts.allDistinctBuyerEmails)} distinct buyer emails`}
+            title="US Share of Buyers"
+            value={formatPercent(campaign.seedCounts.usBuyerShareOfAllPct)}
+            subtitle={`${formatInteger(campaign.seedCounts.usBuyersConsentedSubset)} of the US seed also comms-consented`}
             icon={<Target className="h-5 w-5" />}
           />
           <MetricCard
@@ -118,7 +118,7 @@ export default async function MarketingPage() {
           <MetricCard
             title="US Viability"
             value={usViability ? usViability.viability.toUpperCase() : 'N/A'}
-            subtitle={usViability ? `${formatInteger(usViability.consentedBuyerSourceCount)} consented source records` : 'No US row'}
+            subtitle={usViability ? `${formatInteger(usViability.eligibleSourceCount)} source records (${usViability.basis})` : 'No US row'}
             icon={<Globe className="h-5 w-5" />}
             className="bg-amber-50 border-amber-200"
           />
@@ -176,7 +176,7 @@ export default async function MarketingPage() {
                 <div className="rounded-lg border border-zinc-200 p-4">
                   <p className="text-xs text-zinc-500">Owner incremental reach</p>
                   <p className="mt-1 text-2xl font-semibold">
-                    {formatInteger(campaign.seedCounts.ownerSeedMarketingPrefTrueExcludingBuyers)}
+                    {formatInteger(campaign.seedCounts.ownerSeedConsentedExcludingBuyers)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-zinc-200 p-4">
@@ -189,8 +189,8 @@ export default async function MarketingPage() {
 
               <div className="space-y-2 text-sm text-zinc-700">
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-200 px-4 py-3">
-                  <span>Owner overlap with buyer seed</span>
-                  <span className="font-semibold">{formatInteger(campaign.seedCounts.ownerPrefOverlapBuyerSeed)}</span>
+                  <span>Owner overlap with buyers</span>
+                  <span className="font-semibold">{formatInteger(campaign.seedCounts.ownerPrefOverlapAllBuyers)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-200 px-4 py-3">
                   <span>Paid included rows</span>
@@ -214,7 +214,7 @@ export default async function MarketingPage() {
             <CardHeader>
               <CardTitle className="text-lg">Top Buyer Profile</CardTitle>
               <p className="text-sm text-zinc-500">
-                {campaign.topBuyerProfile.definition} Use this for creative and offer strategy; the Meta source seed is all consented Fever buyers.
+                {campaign.topBuyerProfile.definition} Use this for creative and offer strategy; the Meta source seed is all US Fever buyers.
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -321,7 +321,8 @@ export default async function MarketingPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Country</TableHead>
-                  <TableHead>Source Count</TableHead>
+                  <TableHead>Eligible Source</TableHead>
+                  <TableHead>Basis</TableHead>
                   <TableHead>Expected Match Range</TableHead>
                   <TableHead>Viability</TableHead>
                   <TableHead className="min-w-[280px]">Recommendation</TableHead>
@@ -333,7 +334,8 @@ export default async function MarketingPage() {
                   return (
                     <TableRow key={row.country} className={cn(isUs && 'bg-amber-50/50')}>
                       <TableCell className="font-medium text-zinc-900">{row.country}</TableCell>
-                      <TableCell>{formatInteger(row.consentedBuyerSourceCount)}</TableCell>
+                      <TableCell>{formatInteger(row.eligibleSourceCount)}</TableCell>
+                      <TableCell className="text-zinc-500">{row.basis}</TableCell>
                       <TableCell>{formatInteger(row.expectedMatchLow)}-{formatInteger(row.expectedMatchHigh)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={viabilityBadgeClasses[row.viability]}>
@@ -381,7 +383,7 @@ export default async function MarketingPage() {
                 {campaign.campaign.privacy.note}
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                CSV seeds remain outside the dashboard. Upload the all-consented-buyers seed and ticketholder exclusion only after human approval.
+                CSV seeds remain outside the dashboard. Upload the US all-buyers seed and ticketholder exclusion only after human approval; non-US buyers stay consent-filtered for seeding.
               </div>
               <div className="space-y-3">
                 {campaign.recommendedActions.map((item) => (

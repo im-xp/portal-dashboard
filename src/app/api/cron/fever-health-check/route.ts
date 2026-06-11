@@ -105,13 +105,27 @@ export async function GET(request: Request) {
       feverByDay.get(day)!.add(o.feverOrderId);
     }
 
-    const { data: sbRows } = await supabase
-      .from('fever_orders')
-      .select('fever_order_id, order_created_at')
-      .gte('order_created_at', from)
-      .lt('order_created_at', deltaTo);
+    // Paginate the Supabase read: a 90-day window can exceed PostgREST's row
+    // cap, and a truncated read would surface phantom missing_ids (false
+    // reconciliation alarms). Advance by the actual page size and stop only on
+    // an empty page, so this is correct regardless of the server's max-rows.
+    const sbRows: { fever_order_id: string; order_created_at: string }[] = [];
+    for (let pageStart = 0; ; ) {
+      const { data, error } = await supabase
+        .from('fever_orders')
+        .select('fever_order_id, order_created_at')
+        .gte('order_created_at', from)
+        .lt('order_created_at', deltaTo)
+        .order('fever_order_id', { ascending: true })
+        .range(pageStart, pageStart + 999);
+      if (error) throw new Error(`fever_orders read (page ${pageStart}): ${error.message}`);
+      const page = (data ?? []) as { fever_order_id: string; order_created_at: string }[];
+      if (page.length === 0) break;
+      sbRows.push(...page);
+      pageStart += page.length; // advance by actual count; stop only on an empty page
+    }
     const sbByDay = new Map<string, Set<string>>();
-    for (const r of sbRows ?? []) {
+    for (const r of sbRows) {
       const day = (r.order_created_at as string)?.slice(0, 10);
       if (!day) continue;
       if (!sbByDay.has(day)) sbByDay.set(day, new Set());

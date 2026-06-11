@@ -13,6 +13,10 @@ const FEVER_HOST = process.env.FEVER_HOST || 'data-reporting-api.prod.feverup.co
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60;
 
+// Which timestamp a search's date_from/date_to filter on. Fever's accepted
+// values (per its API validation): CREATED, UPDATED, or EVENT_START.
+export type FeverDateField = 'CREATED_DATE_UTC' | 'UPDATED_DATE_UTC' | 'EVENT_START_DATE_UTC';
+
 export interface FeverOrder {
   feverOrderId: string;
   parentOrderId: string | null;
@@ -343,12 +347,15 @@ async function getAuthToken(): Promise<string> {
 
 async function startSearch(
   token: string,
-  options?: { dateFrom?: string; dateTo?: string }
+  options?: { dateFrom?: string; dateTo?: string; dateField?: FeverDateField }
 ): Promise<string> {
   const body: Record<string, unknown> = {};
 
   if (options?.dateFrom) {
-    body.date_field = 'CREATED_DATE_UTC';
+    // date_field selects which timestamp date_from/date_to filter on. Default
+    // CREATED_DATE_UTC (new orders); UPDATED_DATE_UTC additionally catches
+    // status changes (cancellation/refund) on orders of any age.
+    body.date_field = options.dateField ?? 'CREATED_DATE_UTC';
     body.date_from = options.dateFrom;
   }
   if (options?.dateTo) {
@@ -430,6 +437,7 @@ async function fetchPartition(
 export async function fetchFeverOrders(options?: {
   dateFrom?: string;
   dateTo?: string;
+  dateField?: FeverDateField;
 }): Promise<FeverSyncResult> {
   console.log('[Fever] Starting order fetch...');
 

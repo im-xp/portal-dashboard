@@ -449,19 +449,32 @@ export async function fetchFeverOrders(options?: {
   }
   console.log(`[Fever] Fetched ${allApiOrders.length} orders from API`);
 
-  const orders: FeverOrder[] = [];
-  const items: FeverOrderItem[] = [];
+  // A single order can appear in more than one partition (observed 2026-06-09
+  // with multi-session orders, e.g. the Shuttle plan), so allApiOrders may
+  // carry the same order id twice. De-dupe by primary key before returning:
+  // the cron upserts these in one batch with ON CONFLICT, and Postgres rejects
+  // a statement that touches the same conflict target twice ("ON CONFLICT DO
+  // UPDATE command cannot affect row a second time"). A single duplicate
+  // poisons the whole batch and, with the watermark guard, wedges the sync
+  // until the window is manually cleared. Last occurrence wins.
+  const ordersById = new Map<string, FeverOrder>();
+  const itemsByKey = new Map<string, FeverOrderItem>();
 
   for (const apiOrder of allApiOrders) {
-    orders.push(transformOrder(apiOrder));
+    const order = transformOrder(apiOrder);
+    ordersById.set(order.feverOrderId, order);
 
     const orderItems = apiOrder.order_items || [];
     for (const apiItem of orderItems) {
-      items.push(transformItem(apiItem, String(apiOrder.id)));
+      const item = transformItem(apiItem, String(apiOrder.id));
+      itemsByKey.set(`${item.feverOrderId}::${item.feverItemId}`, item);
     }
   }
 
-  console.log(`[Fever] Transformed: ${orders.length} orders, ${items.length} items`);
+  const orders: FeverOrder[] = [...ordersById.values()];
+  const items: FeverOrderItem[] = [...itemsByKey.values()];
+
+  console.log(`[Fever] Transformed: ${orders.length} orders, ${items.length} items (${allApiOrders.length} raw order records)`);
 
   return {
     orders,

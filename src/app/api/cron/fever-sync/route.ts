@@ -9,6 +9,10 @@ export const maxDuration = 60;
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://dashboard.icelandeclipse.com';
 
+// Earliest date a full re-pull should reach back to (first Fever orders are
+// ~Aug 2025). Used as the default date_from for a no-date manual "full sync".
+const FEVER_EPOCH = '2025-01-01';
+
 interface SyncStats {
   ordersProcessed: number;
   ordersInserted: number;
@@ -86,6 +90,15 @@ async function runSync(
     if (isManual) {
       dateFrom = manualDateFrom;
       dateTo = manualDateTo;
+      // Bare manual sync (no dates) means "full re-pull". Fever 422s on an
+      // empty search body (it requires a date range), so a no-date "Sync Now"
+      // used to fail outright. Default to a wide window covering all history.
+      // NOTE: a true full pull of all orders may exceed maxDuration; for large
+      // corrections prefer chunked date_from/date_to windows.
+      if (!dateFrom && !dateTo) {
+        dateFrom = FEVER_EPOCH;
+        dateTo = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      }
     } else {
       dateFrom = syncState?.last_order_created_at?.split('T')[0];
       // Fever interprets date_to as an exclusive upper bound (created_date < date_to).

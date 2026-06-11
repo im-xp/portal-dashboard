@@ -14,11 +14,13 @@ import {
   Mail,
   HandHeart,
   Megaphone,
+  MessageCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserMenu } from './UserMenu';
 import type { UserRole } from '@/lib/auth';
+import { canAccessWhatsApp } from '@/lib/whatsapp-access';
 
 interface NavItem {
   name: string;
@@ -34,6 +36,7 @@ const navigation: NavItem[] = [
   { name: 'Marketing', href: '/marketing', icon: Megaphone, roles: ['admin'] },
   { name: 'Applications', href: '/applications', icon: FileText, roles: ['admin'] },
   { name: 'Volunteers', href: '/volunteers', icon: HandHeart },
+  { name: 'WhatsApp', href: '/whatsapp', icon: MessageCircle },
   { name: 'Email Queue', href: '/email-queue', icon: Mail, roles: ['admin'] },
 ];
 
@@ -48,7 +51,10 @@ export function Sidebar() {
   }
 
   const role = session?.user?.role || 'admin';
-  const visibleNav = navigation.filter(item => !item.roles || item.roles.includes(role));
+  const visibleNav = navigation.filter(item => {
+    if (item.href === '/whatsapp') return canAccessWhatsApp(session?.user?.email, role);
+    return !item.roles || item.roles.includes(role);
+  });
 
   const handleRefresh = async () => {
     setIsRefreshing(true);

@@ -1,5 +1,6 @@
 import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
+import { canAccessWhatsApp } from '@/lib/whatsapp-access';
 
 const VOLUNTEER_VIEWER_ALLOWED = [
   '/',
@@ -25,9 +26,14 @@ export default withAuth(
     if (role === 'volunteer_viewer') {
       const { pathname } = req.nextUrl;
 
-      const allowed =
-        VOLUNTEER_VIEWER_ALLOWED.includes(pathname) ||
-        VOLUNTEER_VIEWER_ALLOWED_PREFIXES.some(prefix => pathname.startsWith(prefix));
+      // /whatsapp holds non-buyer PII — per-email allowlist, not role-wide
+      const isWhatsApp =
+        pathname.startsWith('/whatsapp') || pathname.startsWith('/api/whatsapp');
+
+      const allowed = isWhatsApp
+        ? canAccessWhatsApp(req.nextauth.token?.email, role)
+        : VOLUNTEER_VIEWER_ALLOWED.includes(pathname) ||
+          VOLUNTEER_VIEWER_ALLOWED_PREFIXES.some(prefix => pathname.startsWith(prefix));
 
       if (!allowed) {
         return NextResponse.redirect(new URL('/volunteers', req.url));

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { fetchFeverOrders, orderToDbRow, itemToDbRow, FeverOrder } from '@/lib/fever';
+import { fetchFeverOrders, orderToDbRow, itemToDbRow, FeverOrder, FeverDateField } from '@/lib/fever';
 import { sendSlackMessage, formatFeverOrderNotification } from '@/lib/slack';
 import { identifyBuyer, trackOrderCompleted, trackOrderCancelled, flushSegment } from '@/lib/segment';
 
@@ -87,6 +87,8 @@ async function runSync(
     // fetchFeverOrders pulls all history.
     let dateFrom: string | undefined;
     let dateTo: string | undefined;
+    // Incremental syncs filter on UPDATED date, manual backfills on CREATED date.
+    let dateField: FeverDateField | undefined;
     if (isManual) {
       dateFrom = manualDateFrom;
       dateTo = manualDateTo;
@@ -100,19 +102,25 @@ async function runSync(
         dateTo = new Date(Date.now() + 86400000).toISOString().split('T')[0];
       }
     } else {
-      dateFrom = syncState?.last_order_created_at?.split('T')[0];
-      // Fever interprets date_to as an exclusive upper bound (created_date < date_to).
-      // Using today's date here silently excluded ALL of today's orders every tick
-      // until the day rolled over. Use tomorrow so the current UTC day is included.
-      // Empirically verified 2026-06-01: date_to=2026-06-01 returned 0 orders dated
-      // 2026-06-01; date_to=2026-06-02 returned all of them.
+      // Incremental: track the UPDATED-date watermark, not created-date. A
+      // status change (cancellation/refund/exchange) bumps an order's
+      // updated_date_utc, so filtering on UPDATED_DATE_UTC re-fetches modified
+      // orders of ANY age — not just newly-created ones. A new order's updated
+      // date ≈ its created date, so this single pass still captures new orders.
+      // (Created-date incremental never re-saw aged orders → stale 'purchased'
+      // items silently over-counted revenue ~$46k, 2026-06.) Falls back to the
+      // created-date watermark on first run before last_order_updated_at is set.
+      dateField = 'UPDATED_DATE_UTC';
+      dateFrom = (syncState?.last_order_updated_at ?? syncState?.last_order_created_at)?.split('T')[0];
+      // Fever interprets date_to as an exclusive upper bound (date < date_to).
+      // Use tomorrow so the current UTC day is included (verified 2026-06-01).
       const tomorrowUtc = new Date(Date.now() + 86400000).toISOString().split('T')[0];
       dateTo = dateFrom ? tomorrowUtc : undefined;
     }
 
-    console.log(`[Fever Sync] Starting ${isManual ? 'manual' : 'incremental'} sync${dateFrom ? ` from ${dateFrom} to ${dateTo}` : ''}`);
+    console.log(`[Fever Sync] Starting ${isManual ? 'manual' : 'incremental'} sync${dateFrom ? ` from ${dateFrom} to ${dateTo} (${dateField ?? 'CREATED_DATE_UTC'})` : ''}`);
 
-    const { orders, items } = await fetchFeverOrders({ dateFrom, dateTo });
+    const { orders, items } = await fetchFeverOrders({ dateFrom, dateTo, dateField });
 
     console.log(`[Fever Sync] Fetched ${orders.length} orders, ${items.length} items`);
 
@@ -258,14 +266,22 @@ async function runSync(
     // distinguish "errored" from "didn't run."
     const hasErrors = stats.errors.length > 0;
     let latestOrderCreated = syncState?.last_order_created_at;
+    // last_order_updated_at is the watermark that DRIVES incremental syncs
+    // (date_field=UPDATED_DATE_UTC). last_order_created_at is kept for
+    // observability. Both advance only over successfully-upserted orders and
+    // only when ALL batches succeeded — otherwise hold so the next tick
+    // re-fetches the failed window.
+    let latestOrderUpdated = syncState?.last_order_updated_at;
     if (!hasErrors) {
       for (const order of orders) {
         if (!successfullyUpsertedOrderIds.has(order.feverOrderId)) continue;
         if (order.orderCreatedAt) {
-          const orderTs = order.orderCreatedAt.toISOString();
-          if (!latestOrderCreated || orderTs > latestOrderCreated) {
-            latestOrderCreated = orderTs;
-          }
+          const ts = order.orderCreatedAt.toISOString();
+          if (!latestOrderCreated || ts > latestOrderCreated) latestOrderCreated = ts;
+        }
+        if (order.orderUpdatedAt) {
+          const ts = order.orderUpdatedAt.toISOString();
+          if (!latestOrderUpdated || ts > latestOrderUpdated) latestOrderUpdated = ts;
         }
       }
     }
@@ -275,6 +291,7 @@ async function runSync(
       .update({
         last_sync_at: new Date().toISOString(),
         last_order_created_at: latestOrderCreated,
+        last_order_updated_at: latestOrderUpdated,
         orders_synced: (syncState?.orders_synced || 0) + stats.ordersInserted,
         items_synced: (syncState?.items_synced || 0) + stats.itemsInserted,
         updated_at: new Date().toISOString(),

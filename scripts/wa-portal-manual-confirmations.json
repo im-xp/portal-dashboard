@@ -1,0 +1,10 @@
+{
+  "_note": "WA non-buyer contacts confirmed as Portal participants by direct conversation, where no phone<->portal-email link exists in our data (the Portal/EdgeOS stores no phone number, and the phone is absent from the CustomerIO phone<->email bridge). These cannot be matched automatically; they are recorded here so the scrub can flag do_not_contact with an audit trail. Reversible from the dashboard.",
+  "confirmations": [
+    {
+      "stable_id": "343f59d1925feefd",
+      "phone": "+5511980993204",
+      "reason": "Replied to Deja's outreach that he is already in the Portal and does not need a Fever ticket. Manually confirmed 2026-06-18."
+    }
+  ]
+}

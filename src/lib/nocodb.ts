@@ -381,8 +381,34 @@ async function triggerBackgroundRefresh(): Promise<void> {
   }
 }
 
+// Tables whose collapse to 0 indicates a degraded fetch, not a real-world change.
+const GUARDED_TABLES = ['applications', 'attendees', 'products', 'payments'] as const;
+
+// Generic regression guard: refuse to overwrite a healthy cache with a fetch where any
+// table that previously had records has dropped to 0. A table going N->0 is essentially
+// never legitimate (it's a NocoDB shape/permission change or a partial failure), so this
+// has no false positives — unlike a hardcoded "every table must be non-empty" minimum,
+// which would wrongly fire for a legitimately-empty table or a brand-new popup.
+// On a cold cache there is no baseline; the intrinsic join check in fetchFreshDashboardData
+// backstops that case.
+async function assertDashboardNotRegressed(data: DashboardData): Promise<void> {
+  const prev = await getStaleCached<DashboardData>(DASHBOARD_CACHE_KEY);
+  if (!prev) return; // no last-good baseline (cold cache)
+  for (const t of GUARDED_TABLES) {
+    const before = prev[t]?.length ?? 0;
+    const now = data[t]?.length ?? 0;
+    if (before > 0 && now === 0) {
+      throw new Error(
+        `Refusing to cache dashboard: table "${t}" collapsed ${before} → 0 records. ` +
+        `Keeping last-good cache; likely an upstream NocoDB regression or partial fetch failure.`
+      );
+    }
+  }
+}
+
 export async function refreshDashboardCache(): Promise<DashboardData> {
   const data = await fetchFreshDashboardData();
+  await assertDashboardNotRegressed(data);
   await setCache(DASHBOARD_CACHE_KEY, data);
   return data;
 }
@@ -427,6 +453,19 @@ async function fetchFreshDashboardData(): Promise<DashboardData> {
   // Filter out attendees linked to volunteer applications (attendees table has no popup_city_id)
   const validAppIds = new Set(applications.map(a => a.id));
   const attendees = allAttendees.filter(a => validAppIds.has(a.application_id));
+
+  // Guard: the attendee->application join silently zeroing out is the signature of a
+  // NocoDB field-shape change (e.g. attendees.application_id dropping from the payload).
+  // If we have raw attendees AND applications but the join matched none, refuse to build
+  // a degraded dataset — better to throw (and keep serving last-good cache) than to
+  // render a clean-but-empty /people page. This check is cold-cache safe.
+  if (applications.length > 0 && allAttendees.length > 0 && attendees.length === 0) {
+    throw new Error(
+      `Attendee→application join produced 0 matches from ${allAttendees.length} attendees ` +
+      `and ${applications.length} applications. Likely a NocoDB shape change on ` +
+      `attendees.application_id. Refusing to cache a degraded (0-people) dataset.`
+    );
+  }
 
   const productsMap = new Map<number, LinkedProduct[]>();
   

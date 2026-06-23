@@ -296,7 +296,15 @@ export async function getApplicationPopupMap(): Promise<Map<number, number>> {
 }
 
 export async function getAttendees(): Promise<Attendee[]> {
-  return nocoFetchAll<Attendee>(TABLES.attendees);
+  const rows = await nocoFetchAll<Attendee>(TABLES.attendees);
+  // NocoDB stopped exposing the flat `application_id` FK on the attendees table;
+  // the link now arrives only nested as `applications.id`. Normalize it back so
+  // downstream consumers (dashboard attendee filter, volunteer grouping) keep working.
+  // Falls back to the flat field if NocoDB ever restores it.
+  return rows.map(a => ({
+    ...a,
+    application_id: a.application_id ?? a.applications?.id,
+  }));
 }
 
 export async function getProducts(): Promise<Product[]> {
